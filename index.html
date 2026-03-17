@@ -2,12 +2,31 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" type="image/svg+xml" href="/RateEdge-Favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>vol-blotter</title>
+    <title>RateEdge — IRO Live Markets Blotter</title>
+    <!-- RateEdge Auth Widget -->
+    <script src="https://rateedge-auth.onrender.com/login-widget.js"></script>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+      // Initialise auth before app renders
+      document.addEventListener('DOMContentLoaded', async function() {
+        const authed = await RateEdgeAuth.init('options');
+        if (!authed) {
+          // Hide root until authenticated
+          document.getElementById('root').style.display = 'none';
+          // Poll for auth
+          const check = setInterval(async () => {
+            if (RateEdgeAuth.isAuthenticated('options')) {
+              clearInterval(check);
+              document.getElementById('root').style.display = 'block';
+            }
+          }, 500);
+        }
+      });
+    </script>
   </body>
 </html>
