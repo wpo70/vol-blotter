@@ -272,7 +272,7 @@ function CfEntryPanel({ label, onCommit, onClose }) {
   const [suggest, setSuggest] = React.useState([]);
   const [activeField, setActiveField] = React.useState(null);
   const iS={background:"#060a10",border:"1px solid #2a4870",color:"#b0bcc8",fontSize:10,borderRadius:3,padding:"3px 6px",fontFamily:"inherit",width:"100%",outline:"none",marginBottom:3};
-  const go=()=>{if(f.bid||f.offer){ onCommit(f); setSuggest([]); }};
+  const go=()=>{if(f.bid||f.offer){ onCommit(f); setF({bid:'',offer:'',bidBank:'',offerBank:'',bidStrike:'',offerStrike:''}); setSuggest([]); }};
   const bankInput=(field,val)=>{ const v=val.toUpperCase(); setActiveField(field); setF(p=>({...p,[field]:v})); setSuggest(v.length>=1?BANKS.filter(b=>b.startsWith(v)&&b!==v).slice(0,6):[]); };
   const SIDES=[{side:"BID",pCol:"#00c040",lCol:"#007a28",fk:"bid",bk:"bidBank",sk:"bidStrike"},{side:"OFFER",pCol:"#ff8c00",lCol:"#994400",fk:"offer",bk:"offerBank",sk:"offerStrike"}];
   return (
@@ -2756,7 +2756,7 @@ export default function App() {
         {activeProduct==="capfloor" && <>
           <span style={{color:"#253a52",margin:"0 6px"}}>|</span>
           {[["atm","ATM Caps & Floors"],["wedge","ATM Swaption v CFS Wedges"],["otm","OTM Caps & Floors"],["custom","Custom Caps & Floors"],["exotic","Cap & Floor Exotics"]].map(([id,lbl])=>(
-            <button key={id} onClick={()=>setCfSubMenu(id)} style={{background:cfSubMenu===id?"rgba(20,60,150,.4)":"transparent",border:`1px solid ${cfSubMenu===id?"rgba(50,110,220,.5)":"transparent"}`,color:cfSubMenu===id?"#80b8f0":"#305070",padding:"3px 8px",borderRadius:3,cursor:"pointer",fontSize:9,fontWeight:700,letterSpacing:".08em",fontFamily:"inherit"}}>{lbl}</button>
+            <button key={id} onClick={()=>{setCfSubMenu(id);setActiveCell(null);}} style={{background:cfSubMenu===id?"rgba(20,60,150,.4)":"transparent",border:`1px solid ${cfSubMenu===id?"rgba(50,110,220,.5)":"transparent"}`,color:cfSubMenu===id?"#80b8f0":"#305070",padding:"3px 8px",borderRadius:3,cursor:"pointer",fontSize:9,fontWeight:700,letterSpacing:".08em",fontFamily:"inherit"}}>{lbl}</button>
           ))}
           {cfSubMenu==="otm" && (
             <button className={`btn${showStrikeMgr?" on":""}`} onClick={()=>setShowStrikeMgr(v=>!v)} style={{marginLeft:8}}>
