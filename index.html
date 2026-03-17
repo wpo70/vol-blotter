@@ -17,7 +17,7 @@
         const resp = await fetch(`${AUTH_API}/api/auth/request-otp`, {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({email, site: 'options'})
+          body: JSON.stringify({email, site: 'blotter'})
         });
         try { return resp.json(); } catch(e) { return {error: 'Server waking up - try again in 30s'}; }
       }
@@ -26,7 +26,7 @@
         const resp = await fetch(`${AUTH_API}/api/auth/verify-otp`, {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({email, site: 'options', code})
+          body: JSON.stringify({email, site: 'blotter', code})
         });
         try { return [resp.status, await resp.json()]; } catch(e) { return [500, {error: 'Try again'}]; }
       }
@@ -50,7 +50,7 @@
           const resp = await fetch(`${AUTH_API}/api/auth/verify-token`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({token, site: 'options'})
+            body: JSON.stringify({token, site: 'blotter'})
           });
           const d = await resp.json();
           return d.valid === true;
