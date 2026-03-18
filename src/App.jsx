@@ -471,6 +471,7 @@ function FwdCfsCell({ quotes, referred, onRefer, onDel, onClick, active, prevQuo
               <div style={{display:"flex",alignItems:"baseline",gap:3}}>
                 <span style={{color:cross?"#5090e0":"#00c040",fontWeight:700,fontSize:11,flex:1,textAlign:"center"}}>{bestBid.price.toFixed(4)}</span>
                 {bestBid.bank&&<span style={{color:cfBkCol(bestBid.bank),fontSize:7}}>{bestBid.bank}</span>}
+                {bestBid.isLeg&&outBid&&<span style={{color:"#1a5030",fontSize:7}} title={`Outright: ${outBid.price.toFixed(4)}`}>†</span>}
               </div>
               {bestBid.isLeg && legged && (hov||true) && (
                 <div style={{fontSize:7,color:"#1e3a28",textAlign:"center",lineHeight:"9px"}}>
@@ -489,6 +490,7 @@ function FwdCfsCell({ quotes, referred, onRefer, onDel, onClick, active, prevQuo
               <div style={{display:"flex",alignItems:"baseline",gap:3}}>
                 <span style={{color:cross?"#5090e0":"#ff8c00",fontWeight:700,fontSize:11,flex:1,textAlign:"center"}}>{bestOffer.price.toFixed(4)}</span>
                 {bestOffer.bank&&<span style={{color:cfBkCol(bestOffer.bank),fontSize:7}}>{bestOffer.bank}</span>}
+                {bestOffer.isLeg&&outOffer&&<span style={{color:"#5a2800",fontSize:7}} title={`Outright: ${outOffer.price.toFixed(4)}`}>†</span>}
               </div>
               {bestOffer.isLeg && legged && (hov||true) && (
                 <div style={{fontSize:7,color:"#3a2010",textAlign:"center",lineHeight:"9px"}}>
@@ -933,9 +935,11 @@ function CapFloorPanel({ ccy, subMenu, hiddenSt, setHiddenSt, cfLiveRef, cfEodRe
       let isActive;
       if(ccy==="AUD"){
         // Sydney = UTC+11 (AEDT) or UTC+10 (AEST) — use Intl to get local Sydney hour
-        const sydStr = nowUtc.toLocaleString("en-AU",{timeZone:"Australia/Sydney",hour:"2-digit",minute:"2-digit",hour12:false});
-        const [hh,mm] = sydStr.split(":").map(Number);
-        const mins = hh*60+mm;
+        // Use Intl.DateTimeFormat for reliable parsing (avoids AM/PM locale issues)
+        const sydParts = new Intl.DateTimeFormat("en-AU",{timeZone:"Australia/Sydney",hour:"2-digit",minute:"2-digit",hour12:false}).formatToParts(nowUtc);
+        const sydHH = parseInt(sydParts.find(p=>p.type==="hour")?.value||"0",10);
+        const sydMM = parseInt(sydParts.find(p=>p.type==="minute")?.value||"0",10);
+        const mins = sydHH*60+sydMM;
         isActive = mins>=510 && mins<990; // 08:30=510, 16:30=990
       } else {
         const utcHour = nowUtc.getUTCHours(), utcMin = nowUtc.getUTCMinutes();
@@ -2756,7 +2760,7 @@ export default function App() {
         {activeProduct==="capfloor" && <>
           <span style={{color:"#253a52",margin:"0 6px"}}>|</span>
           {[["atm","ATM Caps & Floors"],["wedge","ATM Swaption v CFS Wedges"],["otm","OTM Caps & Floors"],["custom","Custom Caps & Floors"],["exotic","Cap & Floor Exotics"]].map(([id,lbl])=>(
-            <button key={id} onClick={()=>{setCfSubMenu(id);setActiveCell(null);}} style={{background:cfSubMenu===id?"rgba(20,60,150,.4)":"transparent",border:`1px solid ${cfSubMenu===id?"rgba(50,110,220,.5)":"transparent"}`,color:cfSubMenu===id?"#80b8f0":"#305070",padding:"3px 8px",borderRadius:3,cursor:"pointer",fontSize:9,fontWeight:700,letterSpacing:".08em",fontFamily:"inherit"}}>{lbl}</button>
+            <button key={id} onClick={()=>{setCfSubMenu(id);setActiveCell(null);setCopiedCfLive(false);setCopiedCfEOD(false);}} style={{background:cfSubMenu===id?"rgba(20,60,150,.4)":"transparent",border:`1px solid ${cfSubMenu===id?"rgba(50,110,220,.5)":"transparent"}`,color:cfSubMenu===id?"#80b8f0":"#305070",padding:"3px 8px",borderRadius:3,cursor:"pointer",fontSize:9,fontWeight:700,letterSpacing:".08em",fontFamily:"inherit"}}>{lbl}</button>
           ))}
           {cfSubMenu==="otm" && (
             <button className={`btn${showStrikeMgr?" on":""}`} onClick={()=>setShowStrikeMgr(v=>!v)} style={{marginLeft:8}}>
