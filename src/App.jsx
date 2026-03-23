@@ -2423,6 +2423,7 @@ export default function App() {
   const cfLiveRef = useRef(null);
   const cfEodRef  = useRef(null);
   const flashTimeoutRef = useRef(null);
+  const liveExpiriesRef = useRef(new Set());
   const [copiedLive, setCopiedLive] = useState(false);
   const [copiedEOD,  setCopiedEOD]  = useState(false);
   const CCYS = ['AUD','USD','EUR','JPY'];
@@ -2460,6 +2461,7 @@ export default function App() {
       const liveResult = buildLiveMidMatrix(volSnap?.atm_vols, ALL_EXPIRIES, TENORS);
       const newMidMatrix = liveResult?.matrix ?? null;
       const newLiveExpiries = liveResult?.liveExpiries ?? new Set();
+      liveExpiriesRef.current = newLiveExpiries;
       const newFwdMap    = buildLiveFwdMatrix(fwdRows, ALL_EXPIRIES);
       const newStrikeMap = buildLiveStrikeMap(newFwdMap, "AUD");
 
@@ -2482,7 +2484,7 @@ export default function App() {
             }
             // Also flash if existing quote is through new mid (only for live expiries, not static fallback)
             const cell = quotes[k];
-            if (cell && newMid != null && newLiveExpiries.has(exp)) {
+            if (cell && newMid != null && liveExpiriesRef.current.has(exp)) {
               const actB = cell.bids.filter(q => !referred.has(`${k}|bids|${q.id}`));
               const actO = cell.offers.filter(q => !referred.has(`${k}|offers|${q.id}`));
               const bestBid   = actB[0]?.price;
@@ -2521,7 +2523,7 @@ export default function App() {
   const CCY_PREM  = {AUD:AUD_PREM, USD:USD_PREM, EUR:AUD_PREM, JPY:AUD_PREM};
   // Use live data if loaded, else fall back to hardcoded
   const FWD      = (activeCcy === "AUD" && liveFwdMap) ? CCY_FWD[activeCcy] : (CCY_FWD[activeCcy] || AUD_FWD);
-  const MID      = (activeCcy === "AUD" && liveMidMatrix) ? liveMidMatrix.matrix : (CCY_MID[activeCcy] || AUD_MID);
+  const MID      = (activeCcy === "AUD" && liveMidMatrix) ? liveMidMatrix : (CCY_MID[activeCcy] || AUD_MID);
   const PREMIUM  = CCY_PREM[activeCcy]  || AUD_PREM;
   const [VOL_MIN,  VOL_MAX]  = CCY_VOL_RANGE[activeCcy]  || [59,87];
   const [PREM_MIN, PREM_MAX] = CCY_PREM_RANGE[activeCcy] || [6,1700];
