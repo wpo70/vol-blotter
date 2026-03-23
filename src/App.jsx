@@ -2471,28 +2471,24 @@ export default function App() {
         newWedgeMids[r.key] = { mid: parseFloat(r.value), updatedAt: r.updated_at };
       });
 
-      // Detect cells where live mid changed enough to flash
+      // Detect cells where existing quote is through the new live mid
+      // Only runs on live expiries from Supabase — never touches static fallback rows
       if (newMidMatrix) {
         const toFlash = new Set();
-        ALL_EXPIRIES.forEach(exp => {
+        newLiveExpiries.forEach(exp => {
           TENORS.forEach((ten, ti) => {
             const k = `${exp}|${ten}`;
-            const oldMid = MID[exp]?.[ti];
             const newMid = newMidMatrix[exp]?.[ti];
-            if (oldMid != null && newMid != null && Math.abs(newMid - oldMid) >= 0.5) {
-              toFlash.add(k);
-            }
-            // Also flash if existing quote is through new mid (only for live expiries, not static fallback)
+            if (newMid == null) return;
             const cell = quotes[k];
-            if (cell && newMid != null && liveExpiriesRef.current.has(exp)) {
-              const actB = cell.bids.filter(q => !referred.has(`${k}|bids|${q.id}`));
-              const actO = cell.offers.filter(q => !referred.has(`${k}|offers|${q.id}`));
-              const bestBid   = actB[0]?.price;
-              const bestOffer = actO[0]?.price;
-              if ((bestBid != null && bestBid > newMid + 0.1) ||
-                  (bestOffer != null && bestOffer < newMid - 0.1)) {
-                toFlash.add(k);
-              }
+            if (!cell) return;
+            const actB = cell.bids.filter(q => !referred.has(`${k}|bids|${q.id}`));
+            const actO = cell.offers.filter(q => !referred.has(`${k}|offers|${q.id}`));
+            const bestBid   = actB[0]?.price;
+            const bestOffer = actO[0]?.price;
+            if ((bestBid != null && bestBid > newMid + 0.1) ||
+                (bestOffer != null && bestOffer < newMid - 0.1)) {
+              toFlash.add(k);
             }
           });
         });
