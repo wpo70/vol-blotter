@@ -648,9 +648,9 @@ function FwdCfsCell({ quotes, referred, onRefer, onDel, onClick, active, prevQuo
 }
 
 // ── Wedge Panel ──────────────────────────────────────────────
-function WedgePanel({ ccy, wedgeQuotes, wedgeRef, wedgeLog=[], setWedgeLog, wedgeActive, setWedgeActive, wedgeFwdImp, setWedgeFwdImp, addWedgeQuote, reloadWedgeQuote, toggleWedgeRef, delWedgeQ, swpQuotes={}, swpReferred, cfQuotes={}, cfRef={}, cfBkCol, liveWedgeMids={} }) {
+function WedgePanel({ ccy, wedgeQuotes, wedgeRef, wedgeLog=[], setWedgeLog, wedgeActive, setWedgeActive, wedgeFwdImp, setWedgeFwdImp, addWedgeQuote, reloadWedgeQuote, toggleWedgeRef, delWedgeQ, swpQuotes={}, swpReferred, cfQuotes={}, cfRef={}, cfBkCol, liveWedgeMids={}, livePremMatrix=null }) {
   const TENORS_IDX = {"1Y":0,"2Y":1,"3Y":2,"4Y":3,"5Y":4,"7Y":5,"10Y":6,"12Y":7,"15Y":8,"20Y":9};
-  const prem = ccy==="AUD" ? AUD_PREM : null;
+  const prem = (ccy==="AUD" && livePremMatrix) ? livePremMatrix : (ccy==="AUD" ? AUD_PREM : null);
   const swpMid = (exp,ten) => {
     if(!prem||!prem[exp]) return null;
     const idx = TENORS_IDX[ten];
@@ -991,7 +991,7 @@ function WedgeLogPanel({ wedgeQuotes, wedgeRef, wedgeLog=[], setWedgeLog, reload
   );
 }
 
-function CapFloorPanel({ ccy, subMenu, hiddenSt, setHiddenSt, cfLiveRef, cfEodRef, swpQuotes={}, swpReferred, liveStrikeMap=null, liveWedgeMids=null }) {
+function CapFloorPanel({ ccy, subMenu, hiddenSt, setHiddenSt, cfLiveRef, cfEodRef, swpQuotes={}, swpReferred, liveStrikeMap=null, liveWedgeMids=null, livePremMatrix=null }) {
   const initQ = () => ({});  // all cells start empty; straddle ref comes from AUD_DUMMY_QUOTES
   const [cfQuotes,  setCfQuotes]  = React.useState(()=>{
     try{ const s=localStorage.getItem("vbl_cfQuotes"); return s?JSON.parse(s):initQ(); }catch{return initQ();}
@@ -1333,7 +1333,7 @@ function CapFloorPanel({ ccy, subMenu, hiddenSt, setHiddenSt, cfLiveRef, cfEodRe
 
   // build wedge lookup: {`${s}x${e}` -> {leggedBid, leggedBidSwpBank, leggedBidWedgeBank, leggedOffer, leggedOfferSwpBank, leggedOfferWedgeBank}}
   const wedgeLookup = React.useMemo(()=>{
-    const AUD_PREM_LOCAL = ccy==="AUD" ? AUD_PREM : null;
+    const AUD_PREM_LOCAL = (ccy==="AUD" && livePremMatrix) ? livePremMatrix : (ccy==="AUD" ? AUD_PREM : null);
     const TENORS_IDX_LOCAL = {"1Y":0,"2Y":1,"3Y":2,"4Y":3,"5Y":4,"7Y":5,"10Y":6,"12Y":7,"15Y":8,"20Y":9};
     const map = {};
     WEDGE_ROWS.forEach(row=>{
@@ -1465,7 +1465,7 @@ function CapFloorPanel({ ccy, subMenu, hiddenSt, setHiddenSt, cfLiveRef, cfEodRe
           swpQuotes={swpQuotes} swpReferred={swpReferred}
           cfQuotes={cfQuotes} cfRef={cfRef}
           cfBkCol={cfBkCol}
-          liveWedgeMids={liveWedgeMids}/>
+          liveWedgeMids={liveWedgeMids} livePremMatrix={activeCcy==="AUD"?livePremMatrix:null}/>
       </div>
 
       {/* ── CUSTOM (persistent) ── */}
@@ -3075,7 +3075,7 @@ export default function App() {
       )}
 
       <div style={{display:activeProduct==="capfloor"?"flex":"none",flex:1,overflow:"hidden",flexDirection:"column",minHeight:0}}>
-        <CapFloorPanel ccy={activeCfCcy} subMenu={cfSubMenu} hiddenSt={cfHiddenSt} setHiddenSt={setCfHiddenSt} cfLiveRef={cfLiveRef} cfEodRef={cfEodRef} swpQuotes={quotes} swpReferred={referred} liveStrikeMap={activeCfCcy==="AUD"?liveStrikeMap:null} liveWedgeMids={activeCfCcy==="AUD"?liveWedgeMids:null}/>
+        <CapFloorPanel ccy={activeCfCcy} subMenu={cfSubMenu} hiddenSt={cfHiddenSt} setHiddenSt={setCfHiddenSt} cfLiveRef={cfLiveRef} cfEodRef={cfEodRef} swpQuotes={quotes} swpReferred={referred} liveStrikeMap={activeCfCcy==="AUD"?liveStrikeMap:null} liveWedgeMids={activeCfCcy==="AUD"?liveWedgeMids:null} livePremMatrix={activeCfCcy==="AUD"?livePremMatrix:null}/>
       </div>
       <div style={{display:activeProduct==="swaption"?"flex":"none",flex:1,overflow:"hidden"}}>
         {/* GRID */}
