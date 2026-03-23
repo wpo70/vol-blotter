@@ -1362,7 +1362,7 @@ function CapFloorPanel({ ccy, subMenu, hiddenSt, setHiddenSt, cfLiveRef, cfEodRe
       }
     });
     return map;
-  }, [wedgeQuotes, wedgeRef, swpQuotes, swpReferred, ccy]);
+  }, [wedgeQuotes, wedgeRef, swpQuotes, swpReferred, ccy, livePremMatrix]);
 
   React.useEffect(()=>{ if(cfLiveRef) cfLiveRef.current=cfExportLive; if(cfEodRef) cfEodRef.current=cfExportEOD; });
 
