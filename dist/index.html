@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/RateEdge-Favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RateEdge — IRO Live Markets Blotter</title>
+    <script type="module" crossorigin src="/assets/index-b_lWOg2f.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DQ3P1g1z.css">
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // Override site name for blotter
+      const AUTH_API = 'https://rateedge-auth.onrender.com';
+
+      async function requestOTP(email) {
+        const resp = await fetch(`${AUTH_API}/api/auth/request-otp`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({email, site: 'blotter'})
+        });
+        try { return resp.json(); } catch(e) { return {error: 'Server waking up - try again in 30s'}; }
+      }
+
+      async function verifyOTP(email, code) {
+        const resp = await fetch(`${AUTH_API}/api/auth/verify-otp`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({email, site: 'blotter', code})
+        });
+        try { return [resp.status, await resp.json()]; } catch(e) { return [500, {error: 'Try again'}]; }
+      }
+
+      function getToken() {
+        try {
+          const d = localStorage.getItem('rateedge_blotter_token');
+          if (!d) return null;
+          const p = JSON.parse(d);
+          if (new Date(p.expiresAt) < new Date()) { localStorage.removeItem('rateedge_blotter_token'); return null; }
+          return p.token;
+        } catch { return null; }
+      }
+
+      function setToken(token, expiresAt) {
+        localStorage.setItem('rateedge_blotter_token', JSON.stringify({token, expiresAt}));
+      }
+
+      async function verifyToken(token) {
+        try {
+          const resp = await fetch(`${AUTH_API}/api/auth/verify-token`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({token, site: 'blotter'})
+          });
+          const d = await resp.json();
+          return d.valid === true;
+        } catch { return false; }
+      }
+
+      function showLogin() {
+        const root = document.getElementById('root');
+        root.style.display = 'none';
+        
+        const overlay = document.createElement('div');
+        overlay.id = 'rateedge-login';
+        overlay.style.cssText = 'position:fixed;inset:0;background:#020617;display:flex;align-items:center;justify-content:center;z-index:99999;font-family:Inter,system-ui,sans-serif;';
+        overlay.innerHTML = `
+          <div style="background:linear-gradient(135deg,#0f172a,#1e293b);border:1px solid rgba(55,65,81,.5);border-radius:16px;padding:2.5rem;width:100%;max-width:400px;box-shadow:0 25px 50px -12px rgba(0,0,0,.5);">
+            <div style="text-align:center;margin-bottom:1.5rem;">
+              <img src="https://rateedge.au/RateEdge-Logo-Dark.svg" alt="RateEdge" style="height:50px;" onerror="this.style.display='none'"/>
+            </div>
+            <div style="color:#f9fafb;font-size:1.25rem;font-weight:600;text-align:center;margin-bottom:.5rem;">IRO Live Blotter</div>
+            <div style="color:#9ca3af;font-size:.875rem;text-align:center;margin-bottom:1.5rem;" id="re-subtitle">Enter your email to sign in</div>
+            <div id="re-msg" style="display:none;padding:.75rem;border-radius:8px;margin-bottom:1rem;font-size:.875rem;text-align:center;"></div>
+            <div id="re-email-step">
+              <input type="email" id="re-email" placeholder="you@company.com" style="width:100%;padding:.875rem 1rem;background:rgba(15,23,42,.8);border:1px solid rgba(55,65,81,.8);border-radius:8px;color:#f9fafb;font-size:1rem;margin-bottom:1rem;box-sizing:border-box;outline:none;"/>
+              <button id="re-send-btn" onclick="sendCode()" style="width:100%;padding:.875rem;background:linear-gradient(135deg,#dc2626,#ef4444);border:none;border-radius:8px;color:#f9fafb;font-size:1rem;font-weight:500;cursor:pointer;">Send Code</button>
+            </div>
+            <div id="re-otp-step" style="display:none;">
+              <input type="text" id="re-otp" placeholder="000000" maxlength="6" style="width:100%;padding:.875rem 1rem;background:rgba(15,23,42,.8);border:1px solid rgba(55,65,81,.8);border-radius:8px;color:#f9fafb;font-size:1.5rem;text-align:center;letter-spacing:.5rem;margin-bottom:1rem;box-sizing:border-box;outline:none;"/>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;">
+                <button onclick="backToEmail()" style="padding:.875rem;background:#334155;border:none;border-radius:8px;color:#f9fafb;font-size:1rem;font-weight:500;cursor:pointer;">Back</button>
+                <button onclick="verify()" style="padding:.875rem;background:linear-gradient(135deg,#dc2626,#ef4444);border:none;border-radius:8px;color:#f9fafb;font-size:1rem;font-weight:500;cursor:pointer;">Verify</button>
+              </div>
+            </div>
+            <div style="color:#6b7280;font-size:.75rem;text-align:center;margin-top:2rem;">Protected by RateEdge Authentication</div>
+          </div>`;
+        document.body.appendChild(overlay);
+      }
+
+      window.sendCode = async function() {
+        const email = document.getElementById('re-email').value;
+        const btn = document.getElementById('re-send-btn');
+        const msg = document.getElementById('re-msg');
+        if (!email || !email.includes('@')) { showMsg('Enter a valid email', 'error'); return; }
+        btn.textContent = 'Sending...'; btn.disabled = true;
+        try {
+          const data = await requestOTP(email);
+          if (data.success || data.message) {
+            document.getElementById('re-email-step').style.display = 'none';
+            document.getElementById('re-otp-step').style.display = 'block';
+            document.getElementById('re-subtitle').textContent = `Code sent to ${email}`;
+            window._re_email = email;
+          } else if (data.error === 'access_pending') {
+            showMsg('Access request submitted. You will be notified once approved.', 'info');
+            btn.textContent = 'Requested'; 
+          } else {
+            showMsg(data.error || 'Server waking up - try again in 30s', 'error');
+            btn.textContent = 'Send Code'; btn.disabled = false;
+          }
+        } catch(e) {
+          showMsg('Cannot reach auth server - try again in 30s', 'error');
+          btn.textContent = 'Send Code'; btn.disabled = false;
+        }
+      };
+
+      window.backToEmail = function() {
+        document.getElementById('re-otp-step').style.display = 'none';
+        document.getElementById('re-email-step').style.display = 'block';
+        document.getElementById('re-subtitle').textContent = 'Enter your email to sign in';
+      };
+
+      window.verify = async function() {
+        const code = document.getElementById('re-otp').value;
+        if (!code || code.length !== 6) { showMsg('Enter the 6-digit code', 'error'); return; }
+        try {
+          const [status, data] = await verifyOTP(window._re_email, code);
+          if (status === 200 && data.token) {
+            setToken(data.token, data.expiresAt);
+            document.getElementById('rateedge-login').remove();
+            document.getElementById('root').style.display = 'block';
+          } else {
+            showMsg(data.error || 'Invalid code', 'error');
+          }
+        } catch(e) {
+          showMsg('Error verifying code - try again', 'error');
+        }
+      };
+
+      function showMsg(text, type) {
+        const msg = document.getElementById('re-msg');
+        msg.textContent = text;
+        msg.style.display = 'block';
+        msg.style.background = type === 'error' ? 'rgba(220,38,38,.2)' : type === 'info' ? 'rgba(59,130,246,.2)' : 'rgba(34,197,94,.2)';
+        msg.style.color = type === 'error' ? '#fca5a5' : type === 'info' ? '#93c5fd' : '#86efac';
+        msg.style.border = `1px solid ${type === 'error' ? 'rgba(220,38,38,.5)' : type === 'info' ? 'rgba(59,130,246,.5)' : 'rgba(34,197,94,.5)'}`;
+      }
+
+      // On load - check existing token
+      window.addEventListener('load', async function() {
+        const token = getToken();
+        if (token) {
+          const valid = await verifyToken(token);
+          if (valid) return; // Already authenticated - show app
+        }
+        showLogin();
+      });
+    </script>
+  </body>
+</html>
