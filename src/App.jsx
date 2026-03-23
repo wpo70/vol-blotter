@@ -64,29 +64,27 @@ async function fetchBlotterMids(ccy = "AUD") {
 // Build live MID matrix from vol_history atm_vols JSON
 function buildLiveMidMatrix(atmVols, expiries, tenors) {
   if (!atmVols || !atmVols.values) return null;
-  // Start with a deep copy of AUD_MID so uncovered expiries still show static fallback
   const result = {};
   expiries.forEach(exp => {
     if (AUD_MID[exp]) result[exp] = [...AUD_MID[exp]];
   });
   let liveCount = 0;
+  const liveExpiries = new Set();
   atmVols.values.forEach(row => {
-    // Handle both "Expiry" and "expiry" field names
     const exp = (row.Expiry ?? row.expiry ?? row.EXPIRY)?.toLowerCase()?.trim();
     if (!exp) return;
-    // Handle both "1Y" and "1y" tenor keys
     const vals = tenors.map(t => {
       const v = row[t] ?? row[t.toLowerCase()] ?? row[t.toUpperCase()];
       return v != null ? parseFloat(v) : null;
     });
-    // Only overlay if we got at least some real values
     if (vals.some(v => v != null)) {
       result[exp] = vals;
+      liveExpiries.add(exp);
       liveCount++;
     }
   });
   console.log(`[loadFreshMids] live vol rows overlaid: ${liveCount}, total expiry keys: ${Object.keys(result).length}`);
-  return liveCount > 0 ? result : null;
+  return liveCount > 0 ? { matrix: result, liveExpiries } : null;
 }
 
 // Build live FWD matrix from swap_rates rows
@@ -2459,7 +2457,9 @@ export default function App() {
         fetchBlotterMids("AUD"),
       ]);
 
-      const newMidMatrix = buildLiveMidMatrix(volSnap?.atm_vols, ALL_EXPIRIES, TENORS);
+      const liveResult = buildLiveMidMatrix(volSnap?.atm_vols, ALL_EXPIRIES, TENORS);
+      const newMidMatrix = liveResult?.matrix ?? null;
+      const newLiveExpiries = liveResult?.liveExpiries ?? new Set();
       const newFwdMap    = buildLiveFwdMatrix(fwdRows, ALL_EXPIRIES);
       const newStrikeMap = buildLiveStrikeMap(newFwdMap, "AUD");
 
@@ -2480,9 +2480,9 @@ export default function App() {
             if (oldMid != null && newMid != null && Math.abs(newMid - oldMid) >= 0.5) {
               toFlash.add(k);
             }
-            // Also flash if existing quote is through new mid
+            // Also flash if existing quote is through new mid (only for live expiries, not static fallback)
             const cell = quotes[k];
-            if (cell && newMid != null) {
+            if (cell && newMid != null && newLiveExpiries.has(exp)) {
               const actB = cell.bids.filter(q => !referred.has(`${k}|bids|${q.id}`));
               const actO = cell.offers.filter(q => !referred.has(`${k}|offers|${q.id}`));
               const bestBid   = actB[0]?.price;
@@ -2521,7 +2521,7 @@ export default function App() {
   const CCY_PREM  = {AUD:AUD_PREM, USD:USD_PREM, EUR:AUD_PREM, JPY:AUD_PREM};
   // Use live data if loaded, else fall back to hardcoded
   const FWD      = (activeCcy === "AUD" && liveFwdMap) ? CCY_FWD[activeCcy] : (CCY_FWD[activeCcy] || AUD_FWD);
-  const MID      = (activeCcy === "AUD" && liveMidMatrix) ? liveMidMatrix : (CCY_MID[activeCcy] || AUD_MID);
+  const MID      = (activeCcy === "AUD" && liveMidMatrix) ? liveMidMatrix.matrix : (CCY_MID[activeCcy] || AUD_MID);
   const PREMIUM  = CCY_PREM[activeCcy]  || AUD_PREM;
   const [VOL_MIN,  VOL_MAX]  = CCY_VOL_RANGE[activeCcy]  || [59,87];
   const [PREM_MIN, PREM_MAX] = CCY_PREM_RANGE[activeCcy] || [6,1700];
