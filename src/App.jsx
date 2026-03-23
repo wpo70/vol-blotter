@@ -22,7 +22,7 @@ async function sbFetch(path, params = {}) {
 // Fetch latest AUD ATM vol surface from vol_history
 async function fetchLatestAudVols() {
   const rows = await sbFetch("vol_history", {
-    select: "atm_vols,snapshot_date",
+    select: "atm_vols,atm_prems,snapshot_date",
     currency: "eq.AUD",
     order: "snapshot_date.desc",
     limit: "1",
@@ -83,6 +83,26 @@ function buildLiveMidMatrix(atmVols, expiries, tenors) {
   });
   console.log(`[loadFreshMids] live rows: ${liveCount}, expiries: ${[...liveExpiries].join(',')}`);
   return liveCount > 0 ? { matrix: result, liveExpiries } : null;
+}
+
+// Build live PREM matrix from vol_history atm_prems JSON
+function buildLivePremMatrix(atmPrems, expiries, tenors) {
+  if (!atmPrems || !atmPrems.values) return null;
+  const result = {};
+  let liveCount = 0;
+  atmPrems.values.forEach(row => {
+    const exp = (row.Expiry ?? row.expiry ?? row.EXPIRY)?.toLowerCase()?.trim();
+    if (!exp) return;
+    const vals = tenors.map(t => {
+      const v = row[t] ?? row[t.toLowerCase()] ?? row[t.toUpperCase()];
+      return v != null ? parseFloat(v) : null;
+    });
+    if (vals.some(v => v != null)) {
+      result[exp] = vals;
+      liveCount++;
+    }
+  });
+  return liveCount > 0 ? result : null;
 }
 
 // Build live FWD matrix from swap_rates rows
@@ -2436,6 +2456,7 @@ export default function App() {
 
   // ── Live mids from Supabase ──────────────────────────────────────────────
   const [liveMidMatrix, setLiveMidMatrix] = useState(null);   // vol bp matrix {exp: [t0..tn]}
+  const [livePremData,  setLivePremData]  = useState(null);   // premium matrix {exp: [t0..tn]}
   const [liveFwdMap,    setLiveFwdMap]    = useState(null);   // tenor→rate map
   const [livePremMatrix,setLivePremMatrix]= useState(null);   // premium matrix {exp: [t0..tn]}
   const [liveStrikeMap, setLiveStrikeMap] = useState(null);   // {AUD_1: "4.006", ...}
@@ -2458,6 +2479,7 @@ export default function App() {
       ]);
 
       const liveResult = buildLiveMidMatrix(volSnap?.atm_vols, ALL_EXPIRIES, TENORS);
+      const newPremData  = buildLivePremMatrix(volSnap?.atm_prems, ALL_EXPIRIES, TENORS);
       const newMidMatrix = liveResult?.matrix ?? null;
       const newLiveExpiries = liveResult?.liveExpiries ?? new Set();
       liveExpiriesRef.current = newLiveExpiries;
@@ -2496,6 +2518,7 @@ export default function App() {
 
       liveMidMatrixRef.current = newMidMatrix || {};
       setLiveMidMatrix(newMidMatrix);
+      setLivePremData(newPremData);
       setLiveFwdMap(newFwdMap);
       setLiveStrikeMap(newStrikeMap);
       setLiveWedgeMids(newWedgeMids);
@@ -2522,12 +2545,29 @@ export default function App() {
   }, [liveFwdMap]);
   const FWD      = (activeCcy === "AUD" && liveFwdMatrix) ? liveFwdMatrix : (CCY_FWD[activeCcy] || AUD_FWD);
   const MID      = (activeCcy === "AUD" && liveMidMatrix) ? liveMidMatrix : (CCY_MID[activeCcy] || AUD_MID);
-  // Live premium: vol_bp * sqrt(T) * annuity — approximated as vol_bp * static_prem / static_vol per cell
+  // Live premium matrix: use pricer-published atm_prems if available,
+  // else blotter_mids overrides, else ratio scaling fallback
   const livePremMatrix = React.useMemo(() => {
     if (!liveMidMatrix) return null;
+    if (livePremData) return livePremData;
+    // Blotter_mids overrides for key swaption cells
+    const PREM_KEY_MAP = {
+      "3m1y":  {exp:"3m",  ten:"1Y"}, "1y1y":  {exp:"1y",  ten:"1Y"},
+      "2y1y":  {exp:"2y",  ten:"1Y"}, "3y1y":  {exp:"3y",  ten:"1Y"},
+      "4y1y":  {exp:"4y",  ten:"1Y"}, "5y2y":  {exp:"5y",  ten:"2Y"},
+      "7y3y":  {exp:"7y",  ten:"3Y"}, "10y2y": {exp:"10y", ten:"2Y"},
+      "12y3y": {exp:"12y", ten:"3Y"},
+    };
+    const overrides = {};
+    Object.entries(PREM_KEY_MAP).forEach(([key, {exp, ten}]) => {
+      const val = liveWedgeMids?.[key]?.mid;
+      if (val != null) overrides[`${exp}|${ten}`] = val;
+    });
     const m = {};
     ALL_EXPIRIES.forEach(exp => {
       m[exp] = TENORS.map((t, ti) => {
+        const cellKey = `${exp}|${t}`;
+        if (overrides[cellKey] != null) return overrides[cellKey];
         const liveVol   = liveMidMatrix[exp]?.[ti];
         const staticVol = AUD_MID[exp]?.[ti];
         const staticPrem = AUD_PREM[exp]?.[ti];
@@ -2536,7 +2576,7 @@ export default function App() {
       });
     });
     return m;
-  }, [liveMidMatrix]);
+  }, [liveMidMatrix, livePremData, liveWedgeMids]);
   const PREMIUM  = (activeCcy === "AUD" && livePremMatrix) ? livePremMatrix : (CCY_PREM[activeCcy] || AUD_PREM);
   const [VOL_MIN,  VOL_MAX]  = CCY_VOL_RANGE[activeCcy]  || [59,87];
   const [PREM_MIN, PREM_MAX] = CCY_PREM_RANGE[activeCcy] || [6,1700];
