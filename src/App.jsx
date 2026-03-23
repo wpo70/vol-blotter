@@ -1,5 +1,117 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
 
+// ── Supabase config ──────────────────────────────────────────────────────────
+const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL  || "";
+const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+
+async function sbFetch(path, params = {}) {
+  if (!SUPABASE_URL || !SUPABASE_ANON) return null;
+  const url = new URL(`${SUPABASE_URL}/rest/v1/${path}`);
+  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+  const r = await fetch(url.toString(), {
+    headers: {
+      apikey: SUPABASE_ANON,
+      Authorization: `Bearer ${SUPABASE_ANON}`,
+      "Content-Type": "application/json",
+    },
+  });
+  if (!r.ok) return null;
+  return r.json();
+}
+
+// Fetch latest AUD ATM vol surface from vol_history
+async function fetchLatestAudVols() {
+  const rows = await sbFetch("vol_history", {
+    select: "atm_vols,snapshot_date",
+    currency: "eq.AUD",
+    order: "snapshot_date.desc",
+    limit: "1",
+  });
+  if (!rows || !rows.length) return null;
+  return rows[0];
+}
+
+// Fetch forward swap rates from swap_rates (3M BBSW, latest date)
+async function fetchLatestAudFwdRates() {
+  // Get max date
+  const dates = await sbFetch("swap_rates", {
+    select: "date",
+    currency: "eq.AUD",
+    floating_rate: "eq.3M BBSW",
+    order: "date.desc",
+    limit: "1",
+  });
+  if (!dates || !dates.length) return null;
+  const latestDate = dates[0].date;
+  const rows = await sbFetch("swap_rates", {
+    select: "tenor,rate",
+    currency: "eq.AUD",
+    floating_rate: "eq.3M BBSW",
+    date: `eq.${latestDate}`,
+  });
+  return rows;
+}
+
+// Fetch published wedge mids from blotter_mids table
+async function fetchBlotterMids(ccy = "AUD") {
+  const rows = await sbFetch("blotter_mids", {
+    select: "key,value,updated_at",
+    ccy: `eq.${ccy}`,
+  });
+  return rows || [];
+}
+
+// Build live MID matrix from vol_history atm_vols JSON
+function buildLiveMidMatrix(atmVols, expiries, tenors) {
+  if (!atmVols || !atmVols.values) return null;
+  // Start with a deep copy of AUD_MID so uncovered expiries still show static fallback
+  const result = {};
+  expiries.forEach(exp => {
+    if (AUD_MID[exp]) result[exp] = [...AUD_MID[exp]];
+  });
+  let liveCount = 0;
+  atmVols.values.forEach(row => {
+    // Handle both "Expiry" and "expiry" field names
+    const exp = (row.Expiry ?? row.expiry ?? row.EXPIRY)?.toLowerCase()?.trim();
+    if (!exp) return;
+    // Handle both "1Y" and "1y" tenor keys
+    const vals = tenors.map(t => {
+      const v = row[t] ?? row[t.toLowerCase()] ?? row[t.toUpperCase()];
+      return v != null ? parseFloat(v) : null;
+    });
+    // Only overlay if we got at least some real values
+    if (vals.some(v => v != null)) {
+      result[exp] = vals;
+      liveCount++;
+    }
+  });
+  console.log(`[loadFreshMids] live vol rows overlaid: ${liveCount}, total expiry keys: ${Object.keys(result).length}`);
+  return liveCount > 0 ? result : null;
+}
+
+// Build live FWD matrix from swap_rates rows
+function buildLiveFwdMatrix(swapRows, expiries) {
+  if (!swapRows || !swapRows.length) return null;
+  // swapRows has tenor/rate for spot rates — we approximate fwd rates using spot rates
+  // For now expose spot rates keyed by tenor; actual fwd computation happens in options app
+  const tenorMap = {};
+  swapRows.forEach(r => { tenorMap[r.tenor] = parseFloat(r.rate); });
+  return tenorMap;
+}
+
+// Compute approximate ATM strike for cap/floor (use spot swap rate for that tenor)
+function buildLiveStrikeMap(fwdTenorMap, ccy) {
+  if (!fwdTenorMap) return null;
+  const TENOR_KEYS = {1:"1Y",2:"2Y",3:"3Y",4:"4Y",5:"5Y",6:"6Y",7:"7Y",8:"8Y",9:"9Y",10:"10Y",12:"12Y",15:"15Y",20:"20Y"};
+  const result = {};
+  Object.entries(TENOR_KEYS).forEach(([n, key]) => {
+    if (fwdTenorMap[key] != null) {
+      result[`${ccy}_${n}`] = fwdTenorMap[key].toFixed(4);
+    }
+  });
+  return result;
+}
+
 const ALL_EXPIRIES = ["1w","1m","2m","3m","6m","9m","1y","18m","2y","3y","4y","5y","6y","7y","8y","9y","10y","12y","15y","20y","25y","30y"];
 const TENORS       = ["1Y","2Y","3Y","4Y","5Y","7Y","10Y","12Y","15Y","20Y","25Y","30Y"];
 const BANKS        = ["ANZ","BARC","BNPP","BOA","CBA","CITI","CS","DB","GS","HSBC","JPM","MACQ","MIZUHO","MS","MUF","NAB","NOMURA","RBC","SG","SMBC","TD","UBS","WBC","WFC","NWM","LLOY","STAN","ING"];
@@ -540,7 +652,7 @@ function FwdCfsCell({ quotes, referred, onRefer, onDel, onClick, active, prevQuo
 }
 
 // ── Wedge Panel ──────────────────────────────────────────────
-function WedgePanel({ ccy, wedgeQuotes, wedgeRef, wedgeLog=[], setWedgeLog, wedgeActive, setWedgeActive, wedgeFwdImp, setWedgeFwdImp, addWedgeQuote, reloadWedgeQuote, toggleWedgeRef, delWedgeQ, swpQuotes={}, swpReferred, cfQuotes={}, cfRef={}, cfBkCol }) {
+function WedgePanel({ ccy, wedgeQuotes, wedgeRef, wedgeLog=[], setWedgeLog, wedgeActive, setWedgeActive, wedgeFwdImp, setWedgeFwdImp, addWedgeQuote, reloadWedgeQuote, toggleWedgeRef, delWedgeQ, swpQuotes={}, swpReferred, cfQuotes={}, cfRef={}, cfBkCol, liveWedgeMids={} }) {
   const TENORS_IDX = {"1Y":0,"2Y":1,"3Y":2,"4Y":3,"5Y":4,"7Y":5,"10Y":6,"12Y":7,"15Y":8,"20Y":9};
   const prem = ccy==="AUD" ? AUD_PREM : null;
   const swpMid = (exp,ten) => {
@@ -554,15 +666,18 @@ function WedgePanel({ ccy, wedgeQuotes, wedgeRef, wedgeLog=[], setWedgeLog, wedg
     const cell = swpQuotes[k]; if(!cell) return {bid:null,offer:null,bidBank:null,offerBank:null};
     const actB = cell.bids.filter(q=>!swpReferred?.has(`${k}|bids|${q.id}`));
     const actO = cell.offers.filter(q=>!swpReferred?.has(`${k}|offers|${q.id}`));
-    // bids sorted desc on insert, offers sorted asc
     return { bid:actB[0]?.price??null, bidBank:actB[0]?.bank??null, offer:actO[0]?.price??null, offerBank:actO[0]?.bank??null };
   };
+  // Get published wedge mid for a row (from Supabase blotter_mids via liveWedgeMids)
+  const publishedWedgeMid = (rowId) => liveWedgeMids?.[rowId]?.mid ?? null;
   const thS = {color:"#3a6080",fontSize:8,fontWeight:700,padding:"5px 8px",borderBottom:"1px solid #1a2e44",textAlign:"center",letterSpacing:".08em",whiteSpace:"nowrap",background:"#080c14"};
   const thL = {color:"#5a96c8",fontSize:8,fontWeight:700,padding:"5px 8px",borderBottom:"1px solid #1a2e44",textAlign:"center",letterSpacing:".08em",whiteSpace:"nowrap",background:"#080c14"};
+  const hasLiveMids = liveWedgeMids && Object.keys(liveWedgeMids).length > 0;
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minHeight:0}}>
-      <div style={{background:"#080c14",borderBottom:"1px solid #1a2e44",padding:"5px 14px",flexShrink:0}}>
+      <div style={{background:"#080c14",borderBottom:"1px solid #1a2e44",padding:"5px 14px",flexShrink:0,display:"flex",alignItems:"center",gap:8}}>
         <span style={{color:"#3a6080",fontSize:9,letterSpacing:".1em"}}>SWAPTION v CFS WEDGE · {ccy}</span>
+        {hasLiveMids && <span style={{color:"#4a9060",fontSize:8,letterSpacing:".06em"}}>📡 LIVE WEDGE MIDS</span>}
       </div>
       <div style={{flex:1,display:"flex",flexDirection:"row",overflow:"hidden",minHeight:0}}>
         {/* main table */}
@@ -639,6 +754,11 @@ function WedgePanel({ ccy, wedgeQuotes, wedgeRef, wedgeLog=[], setWedgeLog, wedg
                       {sm!=null
                         ?<span style={{color:"#2a4860",fontSize:10,fontWeight:500}}>{sm.toFixed(4)}</span>
                         :<span style={{color:"#1a2a3a",fontSize:8}}>—</span>}
+                      {publishedWedgeMid(row.id) != null && (
+                        <div style={{color:"#4a9060",fontSize:8,marginTop:2,letterSpacing:".04em"}}>
+                          📡 {publishedWedgeMid(row.id).toFixed(2)}bp
+                        </div>
+                      )}
                     </td>
                     {/* live swaption OFFER */}
                     <td style={{padding:"3px 4px",textAlign:"center",verticalAlign:"middle"}}>
@@ -875,7 +995,7 @@ function WedgeLogPanel({ wedgeQuotes, wedgeRef, wedgeLog=[], setWedgeLog, reload
   );
 }
 
-function CapFloorPanel({ ccy, subMenu, hiddenSt, setHiddenSt, cfLiveRef, cfEodRef, swpQuotes={}, swpReferred }) {
+function CapFloorPanel({ ccy, subMenu, hiddenSt, setHiddenSt, cfLiveRef, cfEodRef, swpQuotes={}, swpReferred, liveStrikeMap=null, liveWedgeMids=null }) {
   const initQ = () => ({});  // all cells start empty; straddle ref comes from AUD_DUMMY_QUOTES
   const [cfQuotes,  setCfQuotes]  = React.useState(()=>{
     try{ const s=localStorage.getItem("vbl_cfQuotes"); return s?JSON.parse(s):initQ(); }catch{return initQ();}
@@ -959,6 +1079,13 @@ function CapFloorPanel({ ccy, subMenu, hiddenSt, setHiddenSt, cfLiveRef, cfEodRe
     const id = setInterval(checkSession, 60000);
     return ()=>clearInterval(id);
   },[ccy]);
+
+  // Override cfStrike with live data when available
+  React.useEffect(() => {
+    if (liveStrikeMap && ccy === "AUD") {
+      setCfStrike(prev => ({ ...prev, ...liveStrikeMap }));
+    }
+  }, [liveStrikeMap, ccy]);
 
   const visStrikes = ALL_STRIKES.filter(s=>!hiddenSt.has(s));
   const toggleStrike = (s) => setHiddenSt(prev=>{ const n=new Set(prev); n.has(s)?n.delete(s):n.add(s); return n; });
@@ -1341,7 +1468,8 @@ function CapFloorPanel({ ccy, subMenu, hiddenSt, setHiddenSt, cfLiveRef, cfEodRe
           toggleWedgeRef={toggleWedgeRef} delWedgeQ={delWedgeQ}
           swpQuotes={swpQuotes} swpReferred={swpReferred}
           cfQuotes={cfQuotes} cfRef={cfRef}
-          cfBkCol={cfBkCol}/>
+          cfBkCol={cfBkCol}
+          liveWedgeMids={liveWedgeMids}/>
       </div>
 
       {/* ── CUSTOM (persistent) ── */}
@@ -2296,6 +2424,7 @@ export default function App() {
   const bidRef = useRef(null);
   const cfLiveRef = useRef(null);
   const cfEodRef  = useRef(null);
+  const flashTimeoutRef = useRef(null);
   const [copiedLive, setCopiedLive] = useState(false);
   const [copiedEOD,  setCopiedEOD]  = useState(false);
   const CCYS = ['AUD','USD','EUR','JPY'];
@@ -2306,11 +2435,93 @@ export default function App() {
   const [activeCfCcy,   setActiveCfCcy]   = useState('AUD');
   const CCY_VOL_RANGE  = {AUD:[59,87],   USD:[80,110],  EUR:[59,87],  JPY:[59,87]};
   const CCY_PREM_RANGE = {AUD:[6,1700],  USD:[10,3400], EUR:[6,1700], JPY:[6,1700]};
+
+  // ── Live mids from Supabase ──────────────────────────────────────────────
+  const [liveMidMatrix, setLiveMidMatrix] = useState(null);   // vol bp matrix {exp: [t0..tn]}
+  const [liveFwdMap,    setLiveFwdMap]    = useState(null);   // tenor→rate map
+  const [livePremMatrix,setLivePremMatrix]= useState(null);   // premium matrix {exp: [t0..tn]}
+  const [liveStrikeMap, setLiveStrikeMap] = useState(null);   // {AUD_1: "4.006", ...}
+  const [liveWedgeMids, setLiveWedgeMids] = useState({});     // {id: {mid, updatedAt}}
+  const [midsLoaded,    setMidsLoaded]    = useState(null);   // timestamp string
+  const [midsLoading,   setMidsLoading]   = useState(false);
+  const [flashCells,    setFlashCells]    = useState(new Set()); // "exp|ten" keys flashing red
+
+  const loadFreshMids = useCallback(async () => {
+    if (!SUPABASE_URL || !SUPABASE_ANON) {
+      alert("Supabase not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your .env file.");
+      return;
+    }
+    setMidsLoading(true);
+    try {
+      const [volSnap, fwdRows, wedgeRows] = await Promise.all([
+        fetchLatestAudVols(),
+        fetchLatestAudFwdRates(),
+        fetchBlotterMids("AUD"),
+      ]);
+
+      const newMidMatrix = buildLiveMidMatrix(volSnap?.atm_vols, ALL_EXPIRIES, TENORS);
+      const newFwdMap    = buildLiveFwdMatrix(fwdRows, ALL_EXPIRIES);
+      const newStrikeMap = buildLiveStrikeMap(newFwdMap, "AUD");
+
+      // Build wedge mids map from blotter_mids rows
+      const newWedgeMids = {};
+      wedgeRows.forEach(r => {
+        newWedgeMids[r.key] = { mid: parseFloat(r.value), updatedAt: r.updated_at };
+      });
+
+      // Detect cells where live mid changed enough to flash
+      if (newMidMatrix) {
+        const toFlash = new Set();
+        ALL_EXPIRIES.forEach(exp => {
+          TENORS.forEach((ten, ti) => {
+            const k = `${exp}|${ten}`;
+            const oldMid = MID[exp]?.[ti];
+            const newMid = newMidMatrix[exp]?.[ti];
+            if (oldMid != null && newMid != null && Math.abs(newMid - oldMid) >= 0.5) {
+              toFlash.add(k);
+            }
+            // Also flash if existing quote is through new mid
+            const cell = quotes[k];
+            if (cell && newMid != null) {
+              const actB = cell.bids.filter(q => !referred.has(`${k}|bids|${q.id}`));
+              const actO = cell.offers.filter(q => !referred.has(`${k}|offers|${q.id}`));
+              const bestBid   = actB[0]?.price;
+              const bestOffer = actO[0]?.price;
+              if ((bestBid != null && bestBid > newMid + 0.1) ||
+                  (bestOffer != null && bestOffer < newMid - 0.1)) {
+                toFlash.add(k);
+              }
+            }
+          });
+        });
+        if (toFlash.size > 0) {
+          if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+          setFlashCells(toFlash);
+          flashTimeoutRef.current = setTimeout(() => {
+            setFlashCells(new Set());
+            flashTimeoutRef.current = null;
+          }, 3000);
+        }
+      }
+
+      setLiveMidMatrix(newMidMatrix);
+      setLiveFwdMap(newFwdMap);
+      setLiveStrikeMap(newStrikeMap);
+      setLiveWedgeMids(newWedgeMids);
+      setMidsLoaded(new Date().toLocaleTimeString("en-AU", {hour:"2-digit",minute:"2-digit",second:"2-digit"}));
+    } catch(e) {
+      console.error("loadFreshMids error:", e);
+      alert("Failed to load mids from Supabase: " + e.message);
+    }
+    setMidsLoading(false);
+  }, [quotes, referred]);
+
   const CCY_FWD   = {AUD:AUD_FWD,  USD:USD_FWD,  EUR:AUD_FWD,  JPY:AUD_FWD};
   const CCY_MID   = {AUD:AUD_MID,  USD:USD_MID,  EUR:AUD_MID,  JPY:AUD_MID};
   const CCY_PREM  = {AUD:AUD_PREM, USD:USD_PREM, EUR:AUD_PREM, JPY:AUD_PREM};
-  const FWD      = CCY_FWD[activeCcy]   || AUD_FWD;
-  const MID      = CCY_MID[activeCcy]   || AUD_MID;
+  // Use live data if loaded, else fall back to hardcoded
+  const FWD      = (activeCcy === "AUD" && liveFwdMap) ? CCY_FWD[activeCcy] : (CCY_FWD[activeCcy] || AUD_FWD);
+  const MID      = (activeCcy === "AUD" && liveMidMatrix) ? liveMidMatrix : (CCY_MID[activeCcy] || AUD_MID);
   const PREMIUM  = CCY_PREM[activeCcy]  || AUD_PREM;
   const [VOL_MIN,  VOL_MAX]  = CCY_VOL_RANGE[activeCcy]  || [59,87];
   const [PREM_MIN, PREM_MAX] = CCY_PREM_RANGE[activeCcy] || [6,1700];
@@ -2740,6 +2951,12 @@ export default function App() {
             style={{background:viewMode==="premium"?"rgba(180,130,20,.25)":"rgba(30,50,80,.3)",border:`1px solid ${viewMode==="premium"?"rgba(200,160,40,.5)":"#253a52"}`,color:viewMode==="premium"?"#d4aa30":"#508090",padding:"3px 10px",borderRadius:3,cursor:"pointer",fontSize:9,fontFamily:"inherit",letterSpacing:".08em"}}>
             {viewMode==="vol"?"bpVOL":"bpPREM"}
           </button>
+          <button
+            onClick={loadFreshMids}
+            disabled={midsLoading}
+            style={{background:midsLoaded?"rgba(20,120,60,.35)":"rgba(20,50,80,.5)",border:`1px solid ${midsLoaded?"rgba(40,200,100,.4)":"#2e4e78"}`,color:midsLoaded?"#40d880":"#5a96c8",padding:"3px 10px",borderRadius:3,cursor:midsLoading?"wait":"pointer",fontSize:9,fontFamily:"inherit",letterSpacing:".08em",transition:"all .2s"}}>
+            {midsLoading ? "⏳ LOADING..." : midsLoaded ? `🔄 MIDS ${midsLoaded}` : "🔄 LOAD FRESH MIDS"}
+          </button>
           <button onClick={activeProduct==="capfloor"?()=>cfLiveRef.current?.():exportLive}
             style={{background:copiedLive?"rgba(20,120,60,.4)":"rgba(20,50,80,.5)",border:`1px solid ${copiedLive?"rgba(40,200,100,.5)":"#2e4e78"}`,color:copiedLive?"#40e890":"#5a96c8",padding:"3px 10px",borderRadius:3,cursor:"pointer",fontSize:9,fontFamily:"inherit",letterSpacing:".08em",transition:"all .2s"}}>
             {copiedLive?"COPIED ✓":"LIVE"}
@@ -2843,7 +3060,7 @@ export default function App() {
       )}
 
       <div style={{display:activeProduct==="capfloor"?"flex":"none",flex:1,overflow:"hidden",flexDirection:"column",minHeight:0}}>
-        <CapFloorPanel ccy={activeCfCcy} subMenu={cfSubMenu} hiddenSt={cfHiddenSt} setHiddenSt={setCfHiddenSt} cfLiveRef={cfLiveRef} cfEodRef={cfEodRef} swpQuotes={quotes} swpReferred={referred}/>
+        <CapFloorPanel ccy={activeCfCcy} subMenu={cfSubMenu} hiddenSt={cfHiddenSt} setHiddenSt={setCfHiddenSt} cfLiveRef={cfLiveRef} cfEodRef={cfEodRef} swpQuotes={quotes} swpReferred={referred} liveStrikeMap={activeCfCcy==="AUD"?liveStrikeMap:null} liveWedgeMids={activeCfCcy==="AUD"?liveWedgeMids:null}/>
       </div>
       <div style={{display:activeProduct==="swaption"?"flex":"none",flex:1,overflow:"hidden"}}>
         {/* GRID */}
@@ -2885,7 +3102,9 @@ export default function App() {
                     else if(hasBid) bg = "rgba(0,80,30,.35)";
                     else if(hasOff) bg = "rgba(100,45,0,.30)";
                     if(isActive)    bg = "rgba(30,90,220,.50)";
-                    const bdr = isActive?"rgba(50,140,255,.80)":cross?"rgba(30,70,200,.65)":both?"rgba(80,160,40,.55)":hasBid?"rgba(0,160,60,.50)":hasOff?"rgba(200,100,0,.50)":"rgba(255,255,255,0.12)";
+                    const isFlashing = flashCells.has(k);
+                    if(isFlashing)  bg = "rgba(200,20,20,.55)";
+                    const bdr = isFlashing?"rgba(255,60,60,.90)":isActive?"rgba(50,140,255,.80)":cross?"rgba(30,70,200,.65)":both?"rgba(80,160,40,.55)":hasBid?"rgba(0,160,60,.50)":hasOff?"rgba(200,100,0,.50)":"rgba(255,255,255,0.12)";
 
                     return (
                       <td key={ten} className="hv"
