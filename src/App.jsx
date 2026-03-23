@@ -64,12 +64,10 @@ async function fetchBlotterMids(ccy = "AUD") {
 // Build live MID matrix from vol_history atm_vols JSON
 function buildLiveMidMatrix(atmVols, expiries, tenors) {
   if (!atmVols || !atmVols.values) return null;
+  // Live data only — no static fallback merged in
   const result = {};
-  expiries.forEach(exp => {
-    if (AUD_MID[exp]) result[exp] = [...AUD_MID[exp]];
-  });
-  let liveCount = 0;
   const liveExpiries = new Set();
+  let liveCount = 0;
   atmVols.values.forEach(row => {
     const exp = (row.Expiry ?? row.expiry ?? row.EXPIRY)?.toLowerCase()?.trim();
     if (!exp) return;
@@ -83,7 +81,7 @@ function buildLiveMidMatrix(atmVols, expiries, tenors) {
       liveCount++;
     }
   });
-  console.log(`[loadFreshMids] live vol rows overlaid: ${liveCount}, total expiry keys: ${Object.keys(result).length}`);
+  console.log(`[loadFreshMids] live rows: ${liveCount}, expiries: ${[...liveExpiries].join(',')}`);
   return liveCount > 0 ? { matrix: result, liveExpiries } : null;
 }
 
@@ -2424,6 +2422,7 @@ export default function App() {
   const cfEodRef  = useRef(null);
   const flashTimeoutRef = useRef(null);
   const liveExpiriesRef = useRef(new Set());
+  const liveMidMatrixRef = useRef({});
   const [copiedLive, setCopiedLive] = useState(false);
   const [copiedEOD,  setCopiedEOD]  = useState(false);
   const CCYS = ['AUD','USD','EUR','JPY'];
@@ -2471,23 +2470,16 @@ export default function App() {
         newWedgeMids[r.key] = { mid: parseFloat(r.value), updatedAt: r.updated_at };
       });
 
-      // Detect cells where existing quote is through the new live mid
-      // Only runs on live expiries from Supabase — never touches static fallback rows
+      // Flash cells where the vol mid has moved >= 0.5bp vs previous load
       if (newMidMatrix) {
         const toFlash = new Set();
+        const prevMatrix = liveMidMatrixRef.current || {};
         newLiveExpiries.forEach(exp => {
           TENORS.forEach((ten, ti) => {
             const k = `${exp}|${ten}`;
             const newMid = newMidMatrix[exp]?.[ti];
-            if (newMid == null) return;
-            const cell = quotes[k];
-            if (!cell) return;
-            const actB = cell.bids.filter(q => !referred.has(`${k}|bids|${q.id}`));
-            const actO = cell.offers.filter(q => !referred.has(`${k}|offers|${q.id}`));
-            const bestBid   = actB[0]?.price;
-            const bestOffer = actO[0]?.price;
-            if ((bestBid != null && bestBid > newMid + 0.1) ||
-                (bestOffer != null && bestOffer < newMid - 0.1)) {
+            const oldMid = prevMatrix[exp]?.[ti];
+            if (newMid != null && oldMid != null && Math.abs(newMid - oldMid) >= 0.5) {
               toFlash.add(k);
             }
           });
@@ -2502,6 +2494,7 @@ export default function App() {
         }
       }
 
+      liveMidMatrixRef.current = newMidMatrix || {};
       setLiveMidMatrix(newMidMatrix);
       setLiveFwdMap(newFwdMap);
       setLiveStrikeMap(newStrikeMap);
