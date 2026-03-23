@@ -2511,9 +2511,33 @@ export default function App() {
   const CCY_MID   = {AUD:AUD_MID,  USD:USD_MID,  EUR:AUD_MID,  JPY:AUD_MID};
   const CCY_PREM  = {AUD:AUD_PREM, USD:USD_PREM, EUR:AUD_PREM, JPY:AUD_PREM};
   // Use live data if loaded, else fall back to hardcoded
-  const FWD      = (activeCcy === "AUD" && liveFwdMap) ? CCY_FWD[activeCcy] : (CCY_FWD[activeCcy] || AUD_FWD);
+  // Build live FWD matrix: each expiry row = spot swap rates by tenor
+  const liveFwdMatrix = React.useMemo(() => {
+    if (!liveFwdMap) return null;
+    const TENOR_KEYS = ["1Y","2Y","3Y","4Y","5Y","7Y","10Y","12Y","15Y","20Y","25Y","30Y"];
+    const row = TENOR_KEYS.map(t => liveFwdMap[t] ?? null);
+    const m = {};
+    ALL_EXPIRIES.forEach(exp => { m[exp] = row; });
+    return m;
+  }, [liveFwdMap]);
+  const FWD      = (activeCcy === "AUD" && liveFwdMatrix) ? liveFwdMatrix : (CCY_FWD[activeCcy] || AUD_FWD);
   const MID      = (activeCcy === "AUD" && liveMidMatrix) ? liveMidMatrix : (CCY_MID[activeCcy] || AUD_MID);
-  const PREMIUM  = CCY_PREM[activeCcy]  || AUD_PREM;
+  // Live premium: vol_bp * sqrt(T) * annuity — approximated as vol_bp * static_prem / static_vol per cell
+  const livePremMatrix = React.useMemo(() => {
+    if (!liveMidMatrix) return null;
+    const m = {};
+    ALL_EXPIRIES.forEach(exp => {
+      m[exp] = TENORS.map((t, ti) => {
+        const liveVol   = liveMidMatrix[exp]?.[ti];
+        const staticVol = AUD_MID[exp]?.[ti];
+        const staticPrem = AUD_PREM[exp]?.[ti];
+        if (liveVol == null || staticVol == null || staticVol === 0 || staticPrem == null) return staticPrem ?? null;
+        return parseFloat((staticPrem * liveVol / staticVol).toFixed(2));
+      });
+    });
+    return m;
+  }, [liveMidMatrix]);
+  const PREMIUM  = (activeCcy === "AUD" && livePremMatrix) ? livePremMatrix : (CCY_PREM[activeCcy] || AUD_PREM);
   const [VOL_MIN,  VOL_MAX]  = CCY_VOL_RANGE[activeCcy]  || [59,87];
   const [PREM_MIN, PREM_MAX] = CCY_PREM_RANGE[activeCcy] || [6,1700];
   const [ccyStore, setCcyStore] = useState({AUD:{quotes:{},log:[],referred:new Set()},USD:{quotes:{},log:[],referred:new Set()},EUR:{quotes:{},log:[],referred:new Set()},JPY:{quotes:{},log:[],referred:new Set()}});
