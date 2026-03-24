@@ -1011,7 +1011,7 @@ function WedgeLogPanel({ wedgeQuotes, wedgeRef, wedgeLog=[], setWedgeLog, reload
   );
 }
 
-function CapFloorPanel({ ccy, subMenu, hiddenSt, setHiddenSt, cfLiveRef, cfEodRef, swpQuotes={}, swpReferred, liveStrikeMap=null, liveWedgeMids=null, livePremMatrix=null }) {
+function CapFloorPanel({ ccy, subMenu, hiddenSt, setHiddenSt, cfLiveRef, cfEodRef, swpQuotes={}, swpReferred, liveStrikeMap=null, liveWedgeMids=null, livePremMatrix=null, copiedCfLive=false, setCopiedCfLive=()=>{}, copiedCfEOD=false, setCopiedCfEOD=()=>{} }) {
   const initQ = () => ({});  // all cells start empty; straddle ref comes from AUD_DUMMY_QUOTES
   const [cfQuotes,  setCfQuotes]  = React.useState(()=>{
     try{ const s=localStorage.getItem("vbl_cfQuotes"); return s?JSON.parse(s):initQ(); }catch{return initQ();}
@@ -1060,8 +1060,6 @@ function CapFloorPanel({ ccy, subMenu, hiddenSt, setHiddenSt, cfLiveRef, cfEodRe
   const [cfFiltMins,setCfFiltMins]= React.useState(null);
   const [cfFiltStrike,setCfFiltStrike]= React.useState(null);
   const [cfSort,    setCfSort]    = React.useState('desc');
-  const [copiedCfLive,setCopiedCfLive]= React.useState(false);
-  const [copiedCfEOD, setCopiedCfEOD] = React.useState(false);
   const now = new Date();
 
   React.useEffect(()=>{ try{localStorage.setItem("vbl_wedgeLog",JSON.stringify(wedgeLog.slice(0,200)));}catch{} },[wedgeLog]);
@@ -2469,6 +2467,8 @@ export default function App() {
   const [activeProduct, setActiveProduct] = useState('swaption');
   const [cfSubMenu,     setCfSubMenu]     = useState('atm');
   const [activeCfCcy,   setActiveCfCcy]   = useState('AUD');
+  const [copiedCfLive,  setCopiedCfLive]  = useState(false);
+  const [copiedCfEOD,   setCopiedCfEOD]   = useState(false);
   const CCY_VOL_RANGE  = {AUD:[59,87],   USD:[80,110],  EUR:[59,87],  JPY:[59,87]};
   const CCY_PREM_RANGE = {AUD:[6,1700],  USD:[10,3400], EUR:[6,1700], JPY:[6,1700]};
 
@@ -3132,7 +3132,7 @@ export default function App() {
       )}
 
       <div style={{display:activeProduct==="capfloor"?"flex":"none",flex:1,overflow:"hidden",flexDirection:"column",minHeight:0}}>
-        <CapFloorPanel ccy={activeCfCcy} subMenu={cfSubMenu} hiddenSt={cfHiddenSt} setHiddenSt={setCfHiddenSt} cfLiveRef={cfLiveRef} cfEodRef={cfEodRef} swpQuotes={quotes} swpReferred={referred} liveStrikeMap={activeCfCcy==="AUD"?liveStrikeMap:null} liveWedgeMids={activeCfCcy==="AUD"?liveWedgeMids:null} livePremMatrix={activeCfCcy==="AUD"?livePremMatrix:null}/>
+        <CapFloorPanel ccy={activeCfCcy} subMenu={cfSubMenu} hiddenSt={cfHiddenSt} setHiddenSt={setCfHiddenSt} cfLiveRef={cfLiveRef} cfEodRef={cfEodRef} swpQuotes={quotes} swpReferred={referred} liveStrikeMap={activeCfCcy==="AUD"?liveStrikeMap:null} liveWedgeMids={activeCfCcy==="AUD"?liveWedgeMids:null} livePremMatrix={activeCfCcy==="AUD"?livePremMatrix:null} copiedCfLive={copiedCfLive} setCopiedCfLive={setCopiedCfLive} copiedCfEOD={copiedCfEOD} setCopiedCfEOD={setCopiedCfEOD}/>
       </div>
       <div style={{display:activeProduct==="swaption"?"flex":"none",flex:1,overflow:"hidden"}}>
         {/* GRID */}
