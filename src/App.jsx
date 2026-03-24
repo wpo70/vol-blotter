@@ -2562,6 +2562,7 @@ export default function App() {
   }, [liveFwdMap]);
   const FWD      = (activeCcy === "AUD" && liveFwdMatrix) ? liveFwdMatrix : (CCY_FWD[activeCcy] || AUD_FWD);
   const MID      = (activeCcy === "AUD" && liveMidMatrix) ? liveMidMatrix : (CCY_MID[activeCcy] || AUD_MID);
+  if (liveMidMatrix) console.log('[MID debug] liveMidMatrix 1w,1Y=', liveMidMatrix['1w']?.[0], 'AUD_MID 1w,1Y=', AUD_MID['1w']?.[0], 'using live=', MID===liveMidMatrix);
   // Live premium matrix: use pricer-published atm_prems if available,
   // else blotter_mids overrides, else ratio scaling fallback
   const livePremMatrix = React.useMemo(() => {
