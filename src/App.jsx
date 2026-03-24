@@ -1026,6 +1026,21 @@ function CapFloorPanel({ ccy, subMenu, hiddenSt, setHiddenSt, cfLiveRef, cfEodRe
   const [cfRef,     setCfRef]     = React.useState({});
   const [cfStrike,  setCfStrike]  = React.useState(ccy==="AUD"?AUD_DUMMY_STRIKE:{});
   const [cfVol,     setCfVol]     = React.useState(ccy==="AUD"?AUD_DUMMY_VOL:{});
+
+  // Sync live ATM strikes and vols from blotter_mids on load
+  React.useEffect(() => {
+    if (!liveWedgeMids || ccy !== "AUD") return;
+    const CF_TENOR_LIST = [1,2,3,4,5,6,7,8,9,10,12,15,20];
+    const strikeUpd = {}, volUpd = {};
+    CF_TENOR_LIST.forEach(t => {
+      const s = liveWedgeMids[`cf_strike_${t}y`]?.mid;
+      if (s != null) strikeUpd[`AUD_${t}`] = parseFloat(s).toFixed(4);
+      const v = liveWedgeMids[`cf_vol_${t}y`]?.mid;
+      if (v != null) volUpd[`AUD_${t}`] = parseFloat(v).toFixed(1);
+    });
+    if (Object.keys(strikeUpd).length > 0) setCfStrike(prev => ({...prev, ...strikeUpd}));
+    if (Object.keys(volUpd).length > 0) setCfVol(prev => ({...prev, ...volUpd}));
+  }, [liveWedgeMids, ccy]);
   const [cfLog,     setCfLog]     = React.useState(()=>{
     try{ return JSON.parse(localStorage.getItem("vbl_cfLog")||"[]").map(l=>({...l,ts:l.ts})); }catch{return[];} 
   });
@@ -1740,8 +1755,11 @@ function CapFloorPanel({ ccy, subMenu, hiddenSt, setHiddenSt, cfLiveRef, cfEodRe
                               const aB=cell.bids.filter(q=>!cfRef[key]?.has(`b|${q.id}`))[0];
                               const aO=cell.offers.filter(q=>!cfRef[key]?.has(`o|${q.id}`))[0];
                               if(tp==="STRADDLE") {
-                                const dq=AUD_DUMMY_QUOTES[`${ccy}_${t}_STRADDLE`];
-                                const rm=dq?((dq.bids[0].price+dq.offers[0].price)/2).toFixed(1):null;
+                                const liveSt = liveWedgeMids?.[`cf_straddle_${t}y`]?.mid;
+                                const dq = AUD_DUMMY_QUOTES[`${ccy}_${t}_STRADDLE`];
+                                const rm = liveSt != null
+                                  ? parseFloat(liveSt).toFixed(1)
+                                  : dq ? ((dq.bids[0].price+dq.offers[0].price)/2).toFixed(1) : null;
                                 return (
                                   <td key={tp} style={{padding:"2px 3px",verticalAlign:"middle"}}>
                                     <CfCell quotes={cfQuotes[key]} referred={cfRef[key]} active={activeCell?.key===key}
