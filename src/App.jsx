@@ -711,6 +711,7 @@ function WedgePanel({ ccy, wedgeQuotes, wedgeRef, wedgeLog=[], setWedgeLog, wedg
                 <th style={{...thS,width:56}}>MID</th>
                 <th style={{...thS,width:64}}>SWP OFFER</th>
                 <th style={{...thL,width:120}}>WEDGE BP&apos;s</th>
+                <th style={{...thS,width:58}}>WDG MID</th>
                 <th style={{...thS,width:65}}>CFS PERIOD</th>
                 <th style={{...thL,width:150}}>LEGGED CFS STRADDLE</th>
               </tr>
@@ -770,11 +771,7 @@ function WedgePanel({ ccy, wedgeQuotes, wedgeRef, wedgeLog=[], setWedgeLog, wedg
                       {sm!=null
                         ?<span style={{color:"#2a4860",fontSize:10,fontWeight:500}}>{sm.toFixed(4)}</span>
                         :<span style={{color:"#1a2a3a",fontSize:8}}>—</span>}
-                      {publishedWedgeMid(row.id) != null && (
-                        <div style={{color:"#4a9060",fontSize:8,marginTop:2,letterSpacing:".04em"}}>
-                          📡 {publishedWedgeMid(row.id).toFixed(2)}bp
-                        </div>
-                      )}
+
                     </td>
                     {/* live swaption OFFER */}
                     <td style={{padding:"3px 4px",textAlign:"center",verticalAlign:"middle"}}>
@@ -794,6 +791,12 @@ function WedgePanel({ ccy, wedgeQuotes, wedgeRef, wedgeLog=[], setWedgeLog, wedg
                         onDel={(s,id)=>delWedgeQ(row.id,s,id)}
                         onClick={()=>setWedgeActive(isActive?null:row.id)}
                         cfBkCol={cfBkCol}/>
+                    </td>
+                    {/* wedge published mid */}
+                    <td style={{padding:"3px 4px",textAlign:"center",verticalAlign:"middle"}}>
+                      {publishedWedgeMid(row.id) != null
+                        ? <span style={{color:"#4a9060",fontSize:10,fontWeight:700}}>{publishedWedgeMid(row.id).toFixed(2)}</span>
+                        : <span style={{color:"#1a2a3a",fontSize:8}}>—</span>}
                     </td>
                     {/* cfs period label */}
                     <td style={{padding:"3px 4px",textAlign:"center",verticalAlign:"middle",color:"#3a6888",fontSize:9,fontWeight:700}}>{row.cfsPeriod}</td>
