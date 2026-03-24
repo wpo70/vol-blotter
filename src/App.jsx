@@ -2476,7 +2476,6 @@ export default function App() {
   const [liveMidMatrix, setLiveMidMatrix] = useState(null);   // vol bp matrix {exp: [t0..tn]}
   const [livePremData,  setLivePremData]  = useState(null);   // premium matrix {exp: [t0..tn]}
   const [liveFwdMap,    setLiveFwdMap]    = useState(null);   // tenor→rate map
-  const [livePremMatrix,setLivePremMatrix]= useState(null);   // premium matrix {exp: [t0..tn]}
   const [liveStrikeMap, setLiveStrikeMap] = useState(null);   // {AUD_1: "4.006", ...}
   const [liveWedgeMids, setLiveWedgeMids] = useState({});     // {id: {mid, updatedAt}}
   const [midsLoaded,    setMidsLoaded]    = useState(null);   // timestamp string
