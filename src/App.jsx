@@ -1500,7 +1500,7 @@ function CapFloorPanel({ ccy, subMenu, hiddenSt, setHiddenSt, cfLiveRef, cfEodRe
           swpQuotes={swpQuotes} swpReferred={swpReferred}
           cfQuotes={cfQuotes} cfRef={cfRef}
           cfBkCol={cfBkCol}
-          liveWedgeMids={liveWedgeMids} livePremMatrix={activeCcy==="AUD"?livePremMatrix:null}/>
+          liveWedgeMids={liveWedgeMids} livePremMatrix={ccy==="AUD"?livePremMatrix:null}/>
       </div>
 
       {/* ── CUSTOM (persistent) ── */}
