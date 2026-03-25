@@ -685,7 +685,22 @@ function WedgePanel({ ccy, wedgeQuotes, wedgeRef, wedgeLog=[], setWedgeLog, wedg
     return { bid:actB[0]?.price??null, bidBank:actB[0]?.bank??null, offer:actO[0]?.price??null, offerBank:actO[0]?.bank??null };
   };
   // Get published wedge mid for a row (from Supabase blotter_mids via liveWedgeMids)
-  const publishedWedgeMid = (rowId) => liveWedgeMids?.[rowId]?.mid ?? null;
+  // Map WEDGE_ROW id -> blotter_mids key (pricer publishes as wedge_cf_spr_XXXX)
+  const WEDGE_ID_TO_MID_KEY = {
+    "3m_1Y":  "wedge_cf_spr_3m1y",   // 3m×1Y -> 0.25x1
+    "1y_1Y":  "wedge_cf_spr_1y1y",   // 1y×1Y -> 1x2
+    "2y_1Y":  "wedge_cf_spr_2y1y",   // 2y×1Y -> 2x3
+    "3y_1Y":  "wedge_cf_spr_3y1y",   // 3y×1Y -> 3x4
+    "4y_1Y":  "wedge_cf_spr_4y1y",   // 4y×1Y -> 4x5
+    "5y_2Y":  "wedge_cf_spr_5y2y",   // 5y×2Y -> 5x7
+    "5y_5Y":  "wedge_cf_spr_7y3y",   // 5y×5Y -> 5x10 (closest to 7y3y)
+    "10y_2Y": "wedge_cf_spr_10y2y",  // 10y×2Y -> 10x12
+    "10y_5Y": "wedge_cf_spr_12y3y",  // 10y×5Y -> 10x15 (closest to 12y3y)
+  };
+  const publishedWedgeMid = (rowId) => {
+    const key = WEDGE_ID_TO_MID_KEY[rowId];
+    return key ? (liveWedgeMids?.[key]?.mid ?? null) : null;
+  };
   const thS = {color:"#3a6080",fontSize:8,fontWeight:700,padding:"5px 8px",borderBottom:"1px solid #1a2e44",textAlign:"center",letterSpacing:".08em",whiteSpace:"nowrap",background:"#080c14"};
   const thL = {color:"#5a96c8",fontSize:8,fontWeight:700,padding:"5px 8px",borderBottom:"1px solid #1a2e44",textAlign:"center",letterSpacing:".08em",whiteSpace:"nowrap",background:"#080c14"};
   const hasLiveMids = liveWedgeMids && Object.keys(liveWedgeMids).length > 0;
@@ -1782,11 +1797,11 @@ function CapFloorPanel({ ccy, subMenu, hiddenSt, setHiddenSt, cfLiveRef, cfEodRe
                             })}
                             <td style={{padding:"2px 3px",verticalAlign:"middle",textAlign:"center"}}>
                               <input value={cfStrike[sk]||''} onChange={e=>setCfStrike(p=>({...p,[sk]:e.target.value}))}
-                                placeholder="4.050%" style={{background:"#060a10",border:"1px solid #1a2e44",color:"#6090b0",fontSize:9,borderRadius:3,padding:"2px 3px",fontFamily:"inherit",width:28,outline:"none",textAlign:"center"}}/>
+                                placeholder="4.8084" style={{background:"#060a10",border:"1px solid #1a2e44",color:"#6090b0",fontSize:9,borderRadius:3,padding:"2px 3px",fontFamily:"inherit",width:44,outline:"none",textAlign:"center"}}/>
                             </td>
                             <td style={{padding:"2px 3px",verticalAlign:"middle",textAlign:"center"}}>
                               <input value={cfVol[sk]||''} onChange={e=>setCfVol(p=>({...p,[sk]:e.target.value}))}
-                                placeholder="93.5" style={{background:"#060a10",border:"1px solid #1a2e44",color:"#a0c0e0",fontSize:9,borderRadius:3,padding:"2px 3px",fontFamily:"inherit",width:26,outline:"none",textAlign:"center"}}/>
+                                placeholder="96.25" style={{background:"#060a10",border:"1px solid #1a2e44",color:"#a0c0e0",fontSize:9,borderRadius:3,padding:"2px 3px",fontFamily:"inherit",width:44,outline:"none",textAlign:"center"}}/>
                             </td>
                           </tr>
                         );
