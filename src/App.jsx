@@ -2482,6 +2482,28 @@ export default function App() {
   const [liveStrikeMap, setLiveStrikeMap] = useState(null);   // {AUD_1: "4.006", ...}
   const [liveWedgeMids, setLiveWedgeMids] = useState({});     // {id: {mid, updatedAt}}
   const [midsLoaded,    setMidsLoaded]    = useState(null);   // timestamp string
+
+  // Auto-load fresh mids on mount
+  const _autoLoaded = React.useRef(false);
+  React.useEffect(() => {
+    if (_autoLoaded.current) return;
+    _autoLoaded.current = true;
+    // Restore from localStorage cache first (instant display)
+    try {
+      const cached = localStorage.getItem('vbl_liveMids');
+      if (cached) {
+        const { midMatrix, premData, fwdMap, strikeMap, wedgeMids, ts } = JSON.parse(cached);
+        if (midMatrix) setLiveMidMatrix(midMatrix);
+        if (premData)  setLivePremData(premData);
+        if (fwdMap)    setLiveFwdMap(fwdMap);
+        if (strikeMap) setLiveStrikeMap(strikeMap);
+        if (wedgeMids) setLiveWedgeMids(wedgeMids);
+        if (ts)        setMidsLoaded(ts);
+      }
+    } catch(e) {}
+    // Then fetch fresh from Supabase
+    setTimeout(() => loadFreshMids(), 500);
+  }, []);
   const [midsLoading,   setMidsLoading]   = useState(false);
   const [flashCells,    setFlashCells]    = useState(new Set()); // "exp|ten" keys flashing red
 
@@ -2542,7 +2564,16 @@ export default function App() {
       setLiveFwdMap(newFwdMap);
       setLiveStrikeMap(newStrikeMap);
       setLiveWedgeMids(newWedgeMids);
-      setMidsLoaded(new Date().toLocaleTimeString("en-AU", {hour:"2-digit",minute:"2-digit",second:"2-digit"}));
+      const _ts = new Date().toLocaleTimeString("en-AU", {hour:"2-digit",minute:"2-digit",second:"2-digit"});
+      setMidsLoaded(_ts);
+      // Cache to localStorage for persistence across refresh/login
+      try {
+        localStorage.setItem('vbl_liveMids', JSON.stringify({
+          midMatrix: newMidMatrix, premData: newPremData,
+          fwdMap: newFwdMap, strikeMap: newStrikeMap,
+          wedgeMids: newWedgeMids, ts: _ts
+        }));
+      } catch(e) {}
     } catch(e) {
       console.error("loadFreshMids error:", e);
       alert("Failed to load mids from Supabase: " + e.message);
