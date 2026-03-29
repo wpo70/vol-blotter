@@ -1127,7 +1127,7 @@ function CapFloorPanel({ ccy, subMenu, hiddenSt, setHiddenSt, cfLiveRef, cfEodRe
         const sydHH = parseInt(sydParts.find(p=>p.type==="hour")?.value||"0",10);
         const sydMM = parseInt(sydParts.find(p=>p.type==="minute")?.value||"0",10);
         const mins = sydHH*60+sydMM;
-        isActive = mins>=510 && mins<990; // 08:30=510, 16:30=990
+        isActive = mins>=420 && mins<1110; // 07:00=420 to 18:30=1110 Sydney
       } else {
         const utcHour = nowUtc.getUTCHours(), utcMin = nowUtc.getUTCMinutes();
         isActive = !(utcHour===0 && utcMin<2); // active except first 2 mins of UTC day
