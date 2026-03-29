@@ -822,35 +822,49 @@ function WedgePanel({ ccy, wedgeQuotes, wedgeRef, wedgeLog=[], setWedgeLog, wedg
                     {/* cfs period label */}
                     <td style={{padding:"3px 4px",textAlign:"center",verticalAlign:"middle",color:"#3a6888",fontSize:9,fontWeight:700}}>{row.cfsPeriod}</td>
                     {/* legged cfs straddle computed — side by side */}
-                    <td style={{padding:"3px 6px",verticalAlign:"middle"}}>
-                      {cfsBid||cfsOffer
-                        ?<div style={{background:"rgba(8,14,24,.6)",border:"1px solid #1a2e44",borderRadius:3,padding:"4px 8px",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-                          {/* BID */}
-                          <div style={{textAlign:"right"}}>
-                            {cfsBid&&<><span style={{color:"#00c040",fontWeight:700,fontSize:12}}>{cfsBid}</span>
-                              <div style={{fontSize:7,marginTop:1}}>
-                                {live.bidBank&&<span style={{color:cfBkCol(live.bidBank),marginRight:2}}>{live.bidBank}</span>}
-                                {wBest&&(wBest.isImplied
-                                  ? <span style={{color:"#1a4060"}}>↔{wBest.fwdBank||"FWD"}</span>
-                                  : wBest.bank&&<span style={{color:cfBkCol(wBest.bank)}}>+{wBest.bank}</span>)}
-                              </div></>}
-                            {!cfsBid&&<span style={{color:"#1e3048",fontSize:9}}>—</span>}
-                          </div>
-                          <span style={{color:"#1e3450",fontSize:11,fontWeight:300}}>/</span>
-                          {/* OFFER */}
-                          <div style={{textAlign:"left"}}>
-                            {cfsOffer&&<><span style={{color:"#ff8c00",fontWeight:700,fontSize:12}}>{cfsOffer}</span>
-                              <div style={{fontSize:7,marginTop:1}}>
-                                {live.offerBank&&<span style={{color:cfBkCol(live.offerBank),marginRight:2}}>{live.offerBank}</span>}
-                                {wOffer&&(wOffer.isImplied
-                                  ? <span style={{color:"#3a2010"}}>↔{wOffer.fwdBank||"FWD"}</span>
-                                  : wOffer.bank&&<span style={{color:cfBkCol(wOffer.bank)}}>+{wOffer.bank}</span>)}
-                              </div></>}
-                            {!cfsOffer&&<span style={{color:"#1e3048",fontSize:9}}>—</span>}
-                          </div>
-                        </div>
-                        :<span style={{color:"#1e3048",fontSize:8,display:"block",textAlign:"center"}}>—</span>}
-                    </td>
+                    {(() => {
+                      // Also show outright FWD price in light blue when no wedge entered
+                      const outrightBid   = fwdActB[0] ? fwdActB[0].price.toFixed(4) : null;
+                      const outrightOffer = fwdActO[0] ? fwdActO[0].price.toFixed(4) : null;
+                      const showOutrightBid   = !cfsBid   && outrightBid;
+                      const showOutrightOffer = !cfsOffer && outrightOffer;
+                      const hasAny = cfsBid||cfsOffer||showOutrightBid||showOutrightOffer;
+                      return (
+                        <td style={{padding:"3px 6px",verticalAlign:"middle"}}>
+                          {hasAny
+                            ?<div style={{background:"rgba(8,14,24,.6)",border:`1px solid ${(showOutrightBid||showOutrightOffer)?"rgba(50,140,255,.4)":"#1a2e44"}`,borderRadius:3,padding:"4px 8px",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+                              {/* BID */}
+                              <div style={{textAlign:"right"}}>
+                                {cfsBid&&<><span style={{color:"#00c040",fontWeight:700,fontSize:12}}>{cfsBid}</span>
+                                  <div style={{fontSize:7,marginTop:1}}>
+                                    {live.bidBank&&<span style={{color:cfBkCol(live.bidBank),marginRight:2}}>{live.bidBank}</span>}
+                                    {wBest&&(wBest.isImplied
+                                      ? <span style={{color:"#1a4060"}}>↔{wBest.fwdBank||"FWD"}</span>
+                                      : wBest.bank&&<span style={{color:cfBkCol(wBest.bank)}}>+{wBest.bank}</span>)}
+                                  </div></>}
+                                {!cfsBid&&showOutrightBid&&<><span style={{color:"#4a9fd4",fontWeight:700,fontSize:12}}>{outrightBid}</span>
+                                  <div style={{fontSize:7,marginTop:1,color:"#2a5070"}}>{fwdActB[0]?.bank&&<span style={{color:cfBkCol(fwdActB[0].bank)}}>{fwdActB[0].bank}</span>} <span style={{color:"#1a3a50"}}>outright</span></div></>}
+                                {!cfsBid&&!showOutrightBid&&<span style={{color:"#1e3048",fontSize:9}}>—</span>}
+                              </div>
+                              <span style={{color:"#1e3450",fontSize:11,fontWeight:300}}>/</span>
+                              {/* OFFER */}
+                              <div style={{textAlign:"left"}}>
+                                {cfsOffer&&<><span style={{color:"#ff8c00",fontWeight:700,fontSize:12}}>{cfsOffer}</span>
+                                  <div style={{fontSize:7,marginTop:1}}>
+                                    {live.offerBank&&<span style={{color:cfBkCol(live.offerBank),marginRight:2}}>{live.offerBank}</span>}
+                                    {wOffer&&(wOffer.isImplied
+                                      ? <span style={{color:"#3a2010"}}>↔{wOffer.fwdBank||"FWD"}</span>
+                                      : wOffer.bank&&<span style={{color:cfBkCol(wOffer.bank)}}>+{wOffer.bank}</span>)}
+                                  </div></>}
+                                {!cfsOffer&&showOutrightOffer&&<><span style={{color:"#4a9fd4",fontWeight:700,fontSize:12}}>{outrightOffer}</span>
+                                  <div style={{fontSize:7,marginTop:1,color:"#2a5070"}}>{fwdActO[0]?.bank&&<span style={{color:cfBkCol(fwdActO[0].bank)}}>{fwdActO[0].bank}</span>} <span style={{color:"#2a4060"}}>outright</span></div></>}
+                                {!cfsOffer&&!showOutrightOffer&&<span style={{color:"#1e3048",fontSize:9}}>—</span>}
+                              </div>
+                            </div>
+                            :<span style={{color:"#1e3048",fontSize:8,display:"block",textAlign:"center"}}>—</span>}
+                        </td>
+                      );
+                    })()}
 
                   </tr>
                 );
@@ -1127,7 +1141,7 @@ function CapFloorPanel({ ccy, subMenu, hiddenSt, setHiddenSt, cfLiveRef, cfEodRe
         const sydHH = parseInt(sydParts.find(p=>p.type==="hour")?.value||"0",10);
         const sydMM = parseInt(sydParts.find(p=>p.type==="minute")?.value||"0",10);
         const mins = sydHH*60+sydMM;
-        isActive = mins>=420 && mins<1110; // 07:00=420 to 18:30=1110 Sydney
+        isActive = mins>=510 && mins<990; // 08:30=510, 16:30=990
       } else {
         const utcHour = nowUtc.getUTCHours(), utcMin = nowUtc.getUTCMinutes();
         isActive = !(utcHour===0 && utcMin<2); // active except first 2 mins of UTC day
