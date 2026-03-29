@@ -1141,7 +1141,7 @@ function CapFloorPanel({ ccy, subMenu, hiddenSt, setHiddenSt, cfLiveRef, cfEodRe
         const sydHH = parseInt(sydParts.find(p=>p.type==="hour")?.value||"0",10);
         const sydMM = parseInt(sydParts.find(p=>p.type==="minute")?.value||"0",10);
         const mins = sydHH*60+sydMM;
-        isActive = mins>=510 && mins<990; // 08:30=510, 16:30=990
+        isActive = mins>=420 && mins<1110; // 07:00=420 to 18:30=1110 Sydney
       } else {
         const utcHour = nowUtc.getUTCHours(), utcMin = nowUtc.getUTCMinutes();
         isActive = !(utcHour===0 && utcMin<2); // active except first 2 mins of UTC day
@@ -2636,13 +2636,21 @@ export default function App() {
   // Use live data if loaded, else fall back to hardcoded
   // Build live FWD matrix: each expiry row = spot swap rates by tenor
   const liveFwdMatrix = React.useMemo(() => {
-    if (!liveFwdMap) return null;
     const TENOR_KEYS = ["1Y","2Y","3Y","4Y","5Y","7Y","10Y","12Y","15Y","20Y","25Y","30Y"];
+    const hasPricerFwds = liveWedgeMids && Object.keys(liveWedgeMids).some(k => k.startsWith("fwd_"));
+    if (hasPricerFwds) {
+      const m = {};
+      ALL_EXPIRIES.forEach(exp => {
+        m[exp] = TENOR_KEYS.map(ten => liveWedgeMids[`fwd_${exp}_${ten}`]?.mid ?? null);
+      });
+      return m;
+    }
+    if (!liveFwdMap) return null;
     const row = TENOR_KEYS.map(t => liveFwdMap[t] ?? null);
     const m = {};
     ALL_EXPIRIES.forEach(exp => { m[exp] = row; });
     return m;
-  }, [liveFwdMap]);
+  }, [liveFwdMap, liveWedgeMids]);
   const FWD      = (activeCcy === "AUD" && liveFwdMatrix) ? liveFwdMatrix : (CCY_FWD[activeCcy] || AUD_FWD);
   const MID      = (activeCcy === "AUD" && liveMidMatrix) ? liveMidMatrix : (CCY_MID[activeCcy] || AUD_MID);
   if (liveMidMatrix) console.log('[MID debug] liveMidMatrix 1w,1Y=', liveMidMatrix['1w']?.[0], 'AUD_MID 1w,1Y=', AUD_MID['1w']?.[0], 'using live=', MID===liveMidMatrix);
@@ -2650,6 +2658,15 @@ export default function App() {
   // else blotter_mids overrides, else ratio scaling fallback
   const livePremMatrix = React.useMemo(() => {
     if (!liveMidMatrix) return null;
+    const TENOR_KEYS = ["1Y","2Y","3Y","4Y","5Y","7Y","10Y","12Y","15Y","20Y","25Y","30Y"];
+    const hasPricerPrems = liveWedgeMids && Object.keys(liveWedgeMids).some(k => k.startsWith("prem_"));
+    if (hasPricerPrems) {
+      const m = {};
+      ALL_EXPIRIES.forEach(exp => {
+        m[exp] = TENOR_KEYS.map(ten => liveWedgeMids[`prem_${exp}_${ten}`]?.mid ?? null);
+      });
+      return m;
+    }
     if (livePremData) return livePremData;
     // Blotter_mids overrides for key swaption cells
     const PREM_KEY_MAP = {
@@ -3091,6 +3108,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v(1)</span>
       </div>
 
       {/* HEADER */}
