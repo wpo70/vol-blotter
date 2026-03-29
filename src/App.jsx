@@ -584,9 +584,13 @@ function FwdCfsCell({ quotes, referred, onRefer, onDel, onClick, active, prevQuo
   const impWedgeBid   = outBid   && legged?.swpOffer !=null && (legBid  ==null||outBid.price  > legBid)   ? +(outBid.price  - legged.swpOffer).toFixed(4) : null;
   const both = bestBid&&bestOffer;
   const cross = both && bestBid.price >= bestOffer.price;
+  // Light blue: outright bid beats legged offer, or legged bid beats outright offer
+  const legCrossOut = outBid && legOffer!=null && outBid.price >= legOffer;   // outright bid ≥ legged offer
+  const legCrossLeg = legBid!=null && outOffer && legBid >= outOffer.price;   // legged bid ≥ outright offer
+  const legHighlight = !cross && (legCrossOut || legCrossLeg);
   let bg = active?"rgba(30,70,150,.35)":"rgba(8,14,24,.8)";
-  if(!active){ if(both) bg=cross?"rgba(20,50,180,.40)":"rgba(30,55,18,.35)"; else if(bestBid) bg="rgba(0,60,20,.30)"; else if(bestOffer) bg="rgba(80,35,0,.28)"; }
-  const bdr = active?"rgba(60,120,220,.6)":cross?"rgba(30,70,200,.55)":both?"rgba(60,140,30,.45)":bestBid?"rgba(0,140,50,.40)":bestOffer?"rgba(180,80,0,.40)":"#1a2e44";
+  if(!active){ if(legHighlight) bg="rgba(10,50,110,.45)"; else if(both) bg=cross?"rgba(20,50,180,.40)":"rgba(30,55,18,.35)"; else if(bestBid) bg="rgba(0,60,20,.30)"; else if(bestOffer) bg="rgba(80,35,0,.28)"; }
+  const bdr = active?"rgba(60,120,220,.6)":legHighlight?"rgba(50,140,255,.7)":cross?"rgba(30,70,200,.55)":both?"rgba(60,140,30,.45)":bestBid?"rgba(0,140,50,.40)":bestOffer?"rgba(180,80,0,.40)":"#1a2e44";
   return (
     <div onClick={onClick} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
       style={{background:bg,border:`1px solid ${bdr}`,borderRadius:3,padding:"2px 5px",cursor:"pointer",minWidth:114,minHeight:34,position:"relative",userSelect:"none"}}>
@@ -805,7 +809,9 @@ function WedgePanel({ ccy, wedgeQuotes, wedgeRef, wedgeLog=[], setWedgeLog, wedg
                         onRefer={(s,id)=>toggleWedgeRef(row.id,s,id)}
                         onDel={(s,id)=>delWedgeQ(row.id,s,id)}
                         onClick={()=>setWedgeActive(isActive?null:row.id)}
-                        cfBkCol={cfBkCol}/>
+                        cfBkCol={cfBkCol}
+                        impBid={impWedgeBidPrice} impOffer={impWedgeOfferPrice}
+                        impBidBank={fwdActB[0]?.bank??null} impOfferBank={fwdActO[0]?.bank??null}/>
                     </td>
                     {/* wedge published mid */}
                     <td style={{padding:"3px 4px",textAlign:"center",verticalAlign:"middle"}}>
@@ -864,7 +870,7 @@ function WedgePanel({ ccy, wedgeQuotes, wedgeRef, wedgeLog=[], setWedgeLog, wedg
 }
 
 // Wedge bid/offer cell (same pattern as CfCell)
-function WedgeCell({ bids, offers, referred, bestBid, bestOffer, active, bg, bdr, cross, isNeg, onRefer, onDel, onClick, cfBkCol }) {
+function WedgeCell({ bids, offers, referred, bestBid, bestOffer, active, bg, bdr, cross, isNeg, onRefer, onDel, onClick, cfBkCol, impBid=null, impOffer=null, impBidBank=null, impOfferBank=null }) {
   const [hov, setHov] = React.useState(false);
   const actB = bids.filter(q=>!referred?.has(`b|${q.id}`)).slice().sort((a,b)=>b.price-a.price);
   const actO = offers.filter(q=>!referred?.has(`o|${q.id}`)).slice().sort((a,b)=>a.price-b.price);
@@ -918,6 +924,20 @@ function WedgeCell({ bids, offers, referred, bestBid, bestOffer, active, bg, bdr
               <span className="del-btn" onClick={e=>{e.stopPropagation();onDel('o',q.id);}}>✕</span>
             </div>
           ))}
+          {(impBid!=null||impOffer!=null)&&<>
+            <div style={{borderTop:"1px solid #1a2e44",marginTop:3}}/>
+            <div style={{color:"#2a5070",fontSize:7,marginTop:2}}>↔ IMPLIED (FWD outright)</div>
+            {impBid!=null&&<div style={{display:"flex",alignItems:"center",gap:3,marginTop:2}}>
+              <span style={{color:bCol,fontWeight:700,fontSize:11,minWidth:36}}>{impBid>0?"+":""}{impBid}</span>
+              {impBidBank&&<span style={{color:cfBkCol(impBidBank),fontSize:7,flex:1}}>{impBidBank}</span>}
+              <span style={{color:"#2a5070",fontSize:7}}>↔swp</span>
+            </div>}
+            {impOffer!=null&&<div style={{display:"flex",alignItems:"center",gap:3,marginTop:2}}>
+              <span style={{color:oCol,fontWeight:700,fontSize:11,minWidth:36}}>{impOffer>0?"+":""}{impOffer}</span>
+              {impOfferBank&&<span style={{color:cfBkCol(impOfferBank),fontSize:7,flex:1}}>{impOfferBank}</span>}
+              <span style={{color:"#3a2010",fontSize:7}}>↔swp</span>
+            </div>}
+          </>}
         </div>
       )}
     </div>
@@ -2602,27 +2622,13 @@ export default function App() {
   // Use live data if loaded, else fall back to hardcoded
   // Build live FWD matrix: each expiry row = spot swap rates by tenor
   const liveFwdMatrix = React.useMemo(() => {
-    // Prefer fwd_ keys published by the pricer (correct forward rates per expiry/tenor)
-    // These are published as fwd_{expiry}_{tenor} e.g. fwd_1y_10Y
-    const TENOR_KEYS = ["1Y","2Y","3Y","4Y","5Y","7Y","10Y","12Y","15Y","20Y","25Y","30Y"];
-    const hasPricerFwds = liveWedgeMids && Object.keys(liveWedgeMids).some(k => k.startsWith("fwd_"));
-    if (hasPricerFwds) {
-      const m = {};
-      ALL_EXPIRIES.forEach(exp => {
-        m[exp] = TENOR_KEYS.map(ten => {
-          const key = `fwd_${exp}_${ten}`;
-          return liveWedgeMids[key]?.mid ?? null;
-        });
-      });
-      return m;
-    }
-    // Fallback: spot rates (same for all expiries — less accurate)
     if (!liveFwdMap) return null;
+    const TENOR_KEYS = ["1Y","2Y","3Y","4Y","5Y","7Y","10Y","12Y","15Y","20Y","25Y","30Y"];
     const row = TENOR_KEYS.map(t => liveFwdMap[t] ?? null);
     const m = {};
     ALL_EXPIRIES.forEach(exp => { m[exp] = row; });
     return m;
-  }, [liveFwdMap, liveWedgeMids]);
+  }, [liveFwdMap]);
   const FWD      = (activeCcy === "AUD" && liveFwdMatrix) ? liveFwdMatrix : (CCY_FWD[activeCcy] || AUD_FWD);
   const MID      = (activeCcy === "AUD" && liveMidMatrix) ? liveMidMatrix : (CCY_MID[activeCcy] || AUD_MID);
   if (liveMidMatrix) console.log('[MID debug] liveMidMatrix 1w,1Y=', liveMidMatrix['1w']?.[0], 'AUD_MID 1w,1Y=', AUD_MID['1w']?.[0], 'using live=', MID===liveMidMatrix);
@@ -2630,20 +2636,6 @@ export default function App() {
   // else blotter_mids overrides, else ratio scaling fallback
   const livePremMatrix = React.useMemo(() => {
     if (!liveMidMatrix) return null;
-    // First preference: prem_ keys published by pricer (fwd premiums per expiry/tenor)
-    const TENOR_KEYS = ["1Y","2Y","3Y","4Y","5Y","7Y","10Y","12Y","15Y","20Y","25Y","30Y"];
-    const hasPricerPrems = liveWedgeMids && Object.keys(liveWedgeMids).some(k => k.startsWith("prem_"));
-    if (hasPricerPrems) {
-      const m = {};
-      ALL_EXPIRIES.forEach(exp => {
-        m[exp] = TENOR_KEYS.map(ten => {
-          const key = `prem_${exp}_${ten}`;
-          return liveWedgeMids[key]?.mid ?? null;
-        });
-      });
-      return m;
-    }
-    // Second preference: atm_prems from vol_history snapshot
     if (livePremData) return livePremData;
     // Blotter_mids overrides for key swaption cells
     const PREM_KEY_MAP = {
