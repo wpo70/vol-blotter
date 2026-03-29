@@ -2602,13 +2602,27 @@ export default function App() {
   // Use live data if loaded, else fall back to hardcoded
   // Build live FWD matrix: each expiry row = spot swap rates by tenor
   const liveFwdMatrix = React.useMemo(() => {
-    if (!liveFwdMap) return null;
+    // Prefer fwd_ keys published by the pricer (correct forward rates per expiry/tenor)
+    // These are published as fwd_{expiry}_{tenor} e.g. fwd_1y_10Y
     const TENOR_KEYS = ["1Y","2Y","3Y","4Y","5Y","7Y","10Y","12Y","15Y","20Y","25Y","30Y"];
+    const hasPricerFwds = liveWedgeMids && Object.keys(liveWedgeMids).some(k => k.startsWith("fwd_"));
+    if (hasPricerFwds) {
+      const m = {};
+      ALL_EXPIRIES.forEach(exp => {
+        m[exp] = TENOR_KEYS.map(ten => {
+          const key = `fwd_${exp}_${ten}`;
+          return liveWedgeMids[key]?.mid ?? null;
+        });
+      });
+      return m;
+    }
+    // Fallback: spot rates (same for all expiries — less accurate)
+    if (!liveFwdMap) return null;
     const row = TENOR_KEYS.map(t => liveFwdMap[t] ?? null);
     const m = {};
     ALL_EXPIRIES.forEach(exp => { m[exp] = row; });
     return m;
-  }, [liveFwdMap]);
+  }, [liveFwdMap, liveWedgeMids]);
   const FWD      = (activeCcy === "AUD" && liveFwdMatrix) ? liveFwdMatrix : (CCY_FWD[activeCcy] || AUD_FWD);
   const MID      = (activeCcy === "AUD" && liveMidMatrix) ? liveMidMatrix : (CCY_MID[activeCcy] || AUD_MID);
   if (liveMidMatrix) console.log('[MID debug] liveMidMatrix 1w,1Y=', liveMidMatrix['1w']?.[0], 'AUD_MID 1w,1Y=', AUD_MID['1w']?.[0], 'using live=', MID===liveMidMatrix);
@@ -2616,6 +2630,20 @@ export default function App() {
   // else blotter_mids overrides, else ratio scaling fallback
   const livePremMatrix = React.useMemo(() => {
     if (!liveMidMatrix) return null;
+    // First preference: prem_ keys published by pricer (fwd premiums per expiry/tenor)
+    const TENOR_KEYS = ["1Y","2Y","3Y","4Y","5Y","7Y","10Y","12Y","15Y","20Y","25Y","30Y"];
+    const hasPricerPrems = liveWedgeMids && Object.keys(liveWedgeMids).some(k => k.startsWith("prem_"));
+    if (hasPricerPrems) {
+      const m = {};
+      ALL_EXPIRIES.forEach(exp => {
+        m[exp] = TENOR_KEYS.map(ten => {
+          const key = `prem_${exp}_${ten}`;
+          return liveWedgeMids[key]?.mid ?? null;
+        });
+      });
+      return m;
+    }
+    // Second preference: atm_prems from vol_history snapshot
     if (livePremData) return livePremData;
     // Blotter_mids overrides for key swaption cells
     const PREM_KEY_MAP = {
