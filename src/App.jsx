@@ -2260,6 +2260,9 @@ function CustomCapsFloors({ ccy, cfBkCol, entries, setEntries, log, setLog }) {
           <div style={{padding:"5px 10px",borderTop:"1px solid #1e3450",fontSize:8,color:"#1e3048",letterSpacing:".07em",flexShrink:0}}>CUSTOM · INDICATIVE ONLY</div>
         </div>
 
+        {/* SPREADS PANEL */}
+        <SpreadCalc MID={MID} PREMIUM={PREMIUM} bkc={bkc}/>
+
       </div>
     </div>
   );
@@ -2476,6 +2479,196 @@ function OtmItem({q, bkc, removeOtm, addCounter, removeCounter}) {
     </div>
   );
 }
+
+// ── Vega-Neutral Spread Calculator ────────────────────────────────────────────
+function SpreadCalc({ MID, PREMIUM, bkc }) {
+  const EMPTY_LEG = () => ({exp:"1y", ten:"1Y", side:"bid", price:"", ratio:"1"});
+  const [legs, setLegs] = React.useState([EMPTY_LEG(), EMPTY_LEG()]);
+  const [autoRatio, setAutoRatio] = React.useState(true);
+  const [spreads, setSpreads] = React.useState([]);
+
+  const getPrem = (exp, ten) => {
+    const ti = ["1Y","2Y","3Y","4Y","5Y","7Y","10Y","12Y","15Y","20Y","25Y","30Y"].indexOf(ten);
+    return PREMIUM?.[exp]?.[ti] ?? null;
+  };
+
+  // Auto-compute vega-neutral ratios from premiums (proxy for vega: √(prem))
+  // Ratio relative to leg[0]
+  const computeAutoRatios = (ls) => {
+    const p0 = getPrem(ls[0].exp, ls[0].ten);
+    if (!p0 || p0 <= 0) return ls.map((_,i) => i===0?1:null);
+    return ls.map(l => {
+      const p = getPrem(l.exp, l.ten);
+      if (!p || p <= 0) return null;
+      return +(p0 / p).toFixed(2);
+    });
+  };
+
+  const updateLeg = (i, field, val) => {
+    setLegs(prev => {
+      const next = prev.map((l,j) => j===i ? {...l,[field]:val} : l);
+      if (autoRatio) {
+        const ratios = computeAutoRatios(next);
+        return next.map((l,j) => ({...l, ratio: ratios[j]!=null ? String(ratios[j]) : l.ratio}));
+      }
+      return next;
+    });
+  };
+
+  const addLeg = () => {
+    if (legs.length >= 3) return;
+    setLegs(prev => {
+      const next = [...prev, EMPTY_LEG()];
+      if (autoRatio) {
+        const ratios = computeAutoRatios(next);
+        return next.map((l,j) => ({...l, ratio: ratios[j]!=null ? String(ratios[j]) : l.ratio}));
+      }
+      return next;
+    });
+  };
+
+  const removeLeg = (i) => setLegs(prev => prev.filter((_,j) => j!==i));
+
+  // Solve: given leg[i] price, what does leg[j] need to be (vega-neutral)?
+  // Net vega cost = Σ sign(side) * price_i * ratio_i = 0
+  // sign: bid=+1 (buying), offer=-1 (selling) from market-maker perspective
+  // User inputs: leg with price = anchor. Solve for leg without price.
+  const solve = () => {
+    const results = [];
+    // Find which legs have prices (anchors) and which are unknown
+    const priced = legs.filter(l => l.price !== "");
+    const unknown = legs.filter(l => l.price === "");
+    if (unknown.length === 0) {
+      // All priced - show vega P&L
+      let net = 0;
+      legs.forEach(l => {
+        const p = parseFloat(l.price);
+        const r = parseFloat(l.ratio) || 1;
+        const sign = l.side === "bid" ? 1 : -1;
+        if (!isNaN(p)) net += sign * p * r;
+      });
+      results.push({type:"net", net: net.toFixed(4)});
+    } else if (unknown.length === 1) {
+      // One unknown - solve for it
+      const ui = legs.indexOf(unknown[0]);
+      let knownNet = 0;
+      legs.forEach((l,i) => {
+        if (i === ui) return;
+        const p = parseFloat(l.price);
+        const r = parseFloat(l.ratio) || 1;
+        const sign = l.side === "bid" ? 1 : -1;
+        if (!isNaN(p)) knownNet += sign * p * r;
+      });
+      const ur = parseFloat(legs[ui].ratio) || 1;
+      const usign = legs[ui].side === "bid" ? 1 : -1;
+      const solvedPrice = -(knownNet) / (usign * ur);
+      results.push({type:"solve", legIdx:ui, price: solvedPrice.toFixed(4)});
+    }
+    setSpreads(results);
+  };
+
+  const iS = {background:"#060a10",border:"1px solid #2a4870",color:"#b0bcc8",fontSize:9,
+    borderRadius:3,padding:"2px 4px",fontFamily:"inherit",outline:"none"};
+  const ALL_EXP = ["1w","1m","2m","3m","6m","9m","1y","18m","2y","3y","4y","5y","6y","7y","8y","9y","10y","12y","15y","20y","25y","30y"];
+  const ALL_TEN = ["1Y","2Y","3Y","4Y","5Y","7Y","10Y","12Y","15Y","20Y","25Y","30Y"];
+
+  return (
+    <div style={{background:"#080c14",borderLeft:"1px solid #1e3450",display:"flex",flexDirection:"column",overflow:"hidden",width:"22%",minWidth:220,maxWidth:300}}>
+      <div style={{padding:"8px 14px",borderBottom:"1px solid #1e3450",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+        <span style={{color:"#60a0c8",fontSize:9,fontWeight:700,letterSpacing:".12em"}}>SPREADS</span>
+        <div style={{display:"flex",gap:5,alignItems:"center"}}>
+          <button onClick={()=>{setAutoRatio(v=>!v);}} style={{...iS,padding:"1px 5px",fontSize:8,color:autoRatio?"#40c080":"#506080",borderColor:autoRatio?"#1a5030":"#2a4060"}}>
+            {autoRatio?"AUTO-V":"MANUAL"}
+          </button>
+          {legs.length < 3 && <button onClick={addLeg} style={{...iS,padding:"1px 6px",fontSize:8,color:"#5a96c8"}}>+LEG</button>}
+        </div>
+      </div>
+
+      <div style={{flex:1,overflow:"auto",padding:"8px 10px"}}>
+        {/* Legs */}
+        {legs.map((l,i) => {
+          const prem = getPrem(l.exp, l.ten);
+          return (
+            <div key={i} style={{marginBottom:8,background:"rgba(15,30,60,.4)",borderRadius:3,padding:"6px 8px",border:`1px solid ${i===0?"#2a4a8a":"#1e3450"}`}}>
+              <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:4}}>
+                <span style={{color:"#4a7898",fontSize:8,fontWeight:700,width:28}}>L{i+1}</span>
+                <select value={l.exp} onChange={e=>updateLeg(i,"exp",e.target.value)}
+                  style={{...iS,flex:1}}>
+                  {ALL_EXP.map(e=><option key={e} value={e}>{e.toUpperCase()}</option>)}
+                </select>
+                <select value={l.ten} onChange={e=>updateLeg(i,"ten",e.target.value)}
+                  style={{...iS,flex:1}}>
+                  {ALL_TEN.map(t=><option key={t} value={t}>{t}</option>)}
+                </select>
+                {legs.length > 2 && <span style={{color:"#4a2020",cursor:"pointer",fontSize:10}} onClick={()=>removeLeg(i)}>✕</span>}
+              </div>
+              <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                <select value={l.side} onChange={e=>updateLeg(i,"side",e.target.value)}
+                  style={{...iS,width:50,color:l.side==="bid"?"#00c040":"#ff8c00",fontWeight:700}}>
+                  <option value="bid">BID</option>
+                  <option value="offer">OFFER</option>
+                </select>
+                <input value={l.price} onChange={e=>updateLeg(i,"price",e.target.value)}
+                  placeholder="bp" style={{...iS,flex:1,color:l.side==="bid"?"#00c040":"#ff8c00",fontWeight:700}}
+                  onKeyDown={e=>e.key==="Enter"&&solve()}/>
+                <div style={{display:"flex",alignItems:"center",gap:2}}>
+                  <span style={{color:"#3a6080",fontSize:8}}>×</span>
+                  <input value={l.ratio} onChange={e=>updateLeg(i,"ratio",e.target.value)}
+                    disabled={autoRatio && i===0}
+                    style={{...iS,width:34,color:autoRatio?"#4a8070":"#b0bcc8",textAlign:"center"}}/>
+                </div>
+              </div>
+              {prem!=null && <div style={{color:"#253a52",fontSize:7,marginTop:3}}>
+                mid {prem.toFixed(1)}bp
+                {autoRatio && i>0 && legs[0] && getPrem(legs[0].exp,legs[0].ten) &&
+                  <span style={{marginLeft:6,color:"#1e3a28"}}>ratio {parseFloat(l.ratio)||"—"}:1</span>}
+              </div>}
+            </div>
+          );
+        })}
+
+        {/* Solve button */}
+        <button onClick={solve} style={{width:"100%",background:"rgba(20,50,100,.5)",border:"1px solid #2e4e78",
+          color:"#5a96c8",borderRadius:3,padding:"4px 0",fontSize:9,fontFamily:"inherit",
+          letterSpacing:".1em",cursor:"pointer",marginTop:2,marginBottom:8}}>
+          SOLVE
+        </button>
+
+        {/* Results */}
+        {spreads.map((r,i) => (
+          <div key={i} style={{background:"rgba(10,25,50,.6)",border:"1px solid #1e3450",borderRadius:3,padding:"8px 10px",marginBottom:6}}>
+            {r.type==="solve" && <>
+              <div style={{color:"#4a7898",fontSize:8,marginBottom:4,letterSpacing:".08em"}}>
+                L{r.legIdx+1} · {legs[r.legIdx]?.exp?.toUpperCase()} × {legs[r.legIdx]?.ten} · {legs[r.legIdx]?.side?.toUpperCase()}
+              </div>
+              <div style={{display:"flex",alignItems:"baseline",gap:6}}>
+                <span style={{color:legs[r.legIdx]?.side==="bid"?"#00c040":"#ff8c00",fontWeight:700,fontSize:18}}>
+                  {r.price}
+                </span>
+                <span style={{color:"#3a6080",fontSize:8}}>bp</span>
+              </div>
+              <div style={{color:"#1e3048",fontSize:7,marginTop:3}}>vega-neutral solve</div>
+            </>}
+            {r.type==="net" && <>
+              <div style={{color:"#4a7898",fontSize:8,marginBottom:4,letterSpacing:".08em"}}>NET VEGA P&L</div>
+              <div style={{display:"flex",alignItems:"baseline",gap:6}}>
+                <span style={{color:parseFloat(r.net)>=0?"#00c040":"#ff8c00",fontWeight:700,fontSize:16}}>
+                  {parseFloat(r.net)>=0?"+":""}{r.net}
+                </span>
+                <span style={{color:"#3a6080",fontSize:8}}>bp</span>
+              </div>
+            </>}
+          </div>
+        ))}
+      </div>
+
+      <div style={{padding:"5px 10px",borderTop:"1px solid #1e3450",fontSize:8,color:"#1e3048",letterSpacing:".07em",flexShrink:0}}>
+        SPREADS · INDICATIVE ONLY
+      </div>
+    </div>
+  );
+}
+
 
 export default function App() {
   const [quotes, setQuotes]               = useState({});
@@ -3566,6 +3759,9 @@ export default function App() {
             OTM · INDICATIVE ONLY
           </div>
         </div>
+
+        {/* SPREADS PANEL */}
+        <SpreadCalc MID={MID} PREMIUM={PREMIUM} bkc={bkc}/>
 
       </div>
     </div>
