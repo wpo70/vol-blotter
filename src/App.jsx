@@ -1,3 +1,4 @@
+// RateEdge vol-blotter 0704d
 import React, { useState, useCallback, useRef, useEffect } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -3339,7 +3340,7 @@ export default function App() {
                               {dispMid ?? "--"}
                             </div>
 
-                            (()=>{
+                            {(()=>{
                               const spr=spreadImplied[`${exp}|${ten}`];
                               if(!spr) return null;
                               const ob=bids.slice().sort((a,b)=>b.price-a.price)[0]?.price??null;
