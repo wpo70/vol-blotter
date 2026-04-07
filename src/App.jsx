@@ -1397,8 +1397,13 @@ function CapFloorPanel({ ccy, subMenu, hiddenSt, setHiddenSt, cfLiveRef, cfEodRe
       const swpCell = swpQuotes[`${row.swpExp}|${row.swpTen}`];
       const swpActB = swpCell ? swpCell.bids.filter(q=>!swpReferred?.has(`${row.swpExp}|${row.swpTen}|bids|${q.id}`)) : [];
       const swpActO = swpCell ? swpCell.offers.filter(q=>!swpReferred?.has(`${row.swpExp}|${row.swpTen}|offers|${q.id}`)) : [];
-      const swpBid   = swpActB[0]?.price ?? (AUD_PREM_LOCAL?.[row.swpExp]?.[TENORS_IDX_LOCAL[row.swpTen]] ?? null);
-      const swpOffer = swpActO[0]?.price ?? (AUD_PREM_LOCAL?.[row.swpExp]?.[TENORS_IDX_LOCAL[row.swpTen]] ?? null);
+      const swpBidOutright   = swpActB[0]?.price ?? (AUD_PREM_LOCAL?.[row.swpExp]?.[TENORS_IDX_LOCAL[row.swpTen]] ?? null);
+      const swpOfferOutright = swpActO[0]?.price ?? (AUD_PREM_LOCAL?.[row.swpExp]?.[TENORS_IDX_LOCAL[row.swpTen]] ?? null);
+      // Overlay spread-implied prices if they improve the swaption
+      const sprKey = `${row.swpExp}|${row.swpTen}`;
+      const sprImp = spreadImplied[sprKey];
+      const swpBid   = (sprImp?.bid!=null   && (swpBidOutright==null   || sprImp.bid   > swpBidOutright))   ? sprImp.bid   : swpBidOutright;
+      const swpOffer = (sprImp?.offer!=null && (swpOfferOutright==null || sprImp.offer < swpOfferOutright)) ? sprImp.offer : swpOfferOutright;
       const wq = wedgeQuotes[row.id]||{bids:[],offers:[]};
       const wr = wedgeRef[row.id];
       const wActB = wq.bids.filter(q=>!wr?.has(`b|${q.id}`)).slice().sort((a,b)=>b.price-a.price);
@@ -1418,7 +1423,7 @@ function CapFloorPanel({ ccy, subMenu, hiddenSt, setHiddenSt, cfLiveRef, cfEodRe
       }
     });
     return map;
-  }, [wedgeQuotes, wedgeRef, swpQuotes, swpReferred, ccy, livePremMatrix]);
+  }, [wedgeQuotes, wedgeRef, swpQuotes, swpReferred, ccy, livePremMatrix, spreadImplied]);
 
   React.useEffect(()=>{ if(cfLiveRef) cfLiveRef.current=cfExportLive; if(cfEodRef) cfEodRef.current=cfExportEOD; });
 
@@ -2470,6 +2475,12 @@ export default function App() {
   const [spreadImplied, setSpreadImplied] = useState({});
   const [spreadResult,  setSpreadResult]  = useState(null);
   const [spreadLog,     setSpreadLog]     = useState(() => loadLS("vbl_spread_log", []));
+  const [toasts, setToasts] = useState([]);
+  const addToast = (msg, type="cross") => {
+    const id = Date.now();
+    setToasts(p=>[...p,{id,msg,type}]);
+    setTimeout(()=>setToasts(p=>p.filter(t=>t.id!==id)), 6000);
+  };
   const [otmQuotes,  setOtmQuotes]       = useState(() => {
     return loadLS("vbl_otm2",[]).map(q=>({...q, ts:new Date(q.ts), counters:(q.counters||[]).map(c=>({...c,ts:new Date(c.ts)}))}));
   });
@@ -3085,6 +3096,17 @@ export default function App() {
         .exp-chip{padding:2px 6px;border-radius:2px;font-size:9px;cursor:pointer;font-family:inherit;font-weight:600;letter-spacing:.08em;transition:all .12s}
       `}</style>
 
+      {/* TOAST NOTIFICATIONS */}
+      {toasts.length>0&&(
+        <div style={{position:"fixed",top:12,right:12,zIndex:9999,display:"flex",flexDirection:"column",gap:6,pointerEvents:"none"}}>
+          {toasts.map(t=>(
+            <div key={t.id} style={{background:"rgba(180,20,20,.92)",border:"1px solid #ff4040",borderRadius:4,padding:"8px 14px",color:"#fff",fontSize:11,fontWeight:700,fontFamily:"'JetBrains Mono',monospace",boxShadow:"0 0 20px rgba(255,50,50,.4)",animation:"lr .2s ease",maxWidth:340,pointerEvents:"auto"}}>
+              {t.msg}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
@@ -3363,10 +3385,24 @@ export default function App() {
                               );
                             })}
 
-                            {(()=>{const spr=spreadImplied[`${exp}|${ten}`];if(!spr)return null;return(
+                            {(()=>{
+                              const spr=spreadImplied[`${exp}|${ten}`];
+                              if(!spr) return null;
+                              // Only show the single best improving side
+                              // bid improvement = spr.bid - best outright bid (higher = better)
+                              // offer improvement = best outright offer - spr.offer (lower = better)
+                              const cell2=quotes[cellKey(exp,ten)];
+                              const ob=(cell2?.bids||[]).filter(q=>!isReferred(cellKey(exp,ten),"bids",q.id)).sort((a,b)=>b.price-a.price)[0]?.price??null;
+                              const oo=(cell2?.offers||[]).filter(q=>!isReferred(cellKey(exp,ten),"offers",q.id)).sort((a,b)=>a.price-b.price)[0]?.price??null;
+                              const bidImprove = spr.bid!=null ? spr.bid-(ob??spr.bid-1) : -Infinity;
+                              const offImprove = spr.offer!=null ? (oo??spr.offer+1)-spr.offer : -Infinity;
+                              const showBid = spr.bid!=null && bidImprove>=0 && bidImprove>=offImprove;
+                              const showOff = spr.offer!=null && offImprove>=0 && offImprove>bidImprove;
+                              if(!showBid&&!showOff) return null;
+                              return(
                               <div style={{borderTop:"1px solid #2a1a4a",marginTop:2,paddingTop:2,textAlign:"center"}}>
-                                {spr.bid!=null&&<div style={{color:"#c080f0",fontWeight:700,fontSize:10}}>{spr.bid.toFixed(4)}<span style={{color:"#6a3090",fontSize:7,marginLeft:2}}>leg</span></div>}
-                                {spr.offer!=null&&<div style={{color:"#9050d0",fontWeight:700,fontSize:10}}>{spr.offer.toFixed(4)}<span style={{color:"#6a3090",fontSize:7,marginLeft:2}}>leg</span></div>}
+                                {showBid&&<div style={{color:"#c080f0",fontWeight:700,fontSize:10}}>{spr.bid.toFixed(4)}<span style={{color:"#6a3090",fontSize:7,marginLeft:2}}>leg</span></div>}
+                                {showOff&&<div style={{color:"#9050d0",fontWeight:700,fontSize:10}}>{spr.offer.toFixed(4)}<span style={{color:"#6a3090",fontSize:7,marginLeft:2}}>leg</span></div>}
                               </div>);})()}
                             {isHov && (hasBid||hasOff) && (
                               <div style={{textAlign:"center",marginTop:1}}>
@@ -3590,6 +3626,17 @@ export default function App() {
               const res={type:"2",rows,l0,l1,R,name:label,ts:new Date().toISOString(),legs:JSON.parse(JSON.stringify(legs))};
               setSpreadResult(res);
               if(rows.length>0) setSpreadLog(prev=>{const next=[{id:Date.now(),...res},...prev.filter(h=>h.name!==label)].slice(0,20);return next;});
+                // Cross detection on swaption grid
+                Object.entries(imp).forEach(([k,v])=>{
+                  const [iexp,iten]=k.split("|");
+                  const cell=quotes[cellKey(iexp,iten)];
+                  if(!cell) return;
+                  const bestBid  =(cell.bids||[]).filter(q=>!isReferred(k,"bids",q.id)).sort((a,b)=>b.price-a.price)[0]?.price??null;
+                  const bestOffer=(cell.offers||[]).filter(q=>!isReferred(k,"offers",q.id)).sort((a,b)=>a.price-b.price)[0]?.price??null;
+                  const impBid=v.bid; const impOff=v.offer;
+                  if(impBid!=null&&bestOffer!=null&&impBid>=bestOffer) addToast(`🔔 CROSS: ${iexp.toUpperCase()}×${iten} — legged bid ${impBid} vs offer ${bestOffer}`,"cross");
+                  if(impOff!=null&&bestBid!=null&&impOff<=bestBid)    addToast(`🔔 CROSS: ${iexp.toUpperCase()}×${iten} — legged offer ${impOff} vs bid ${bestBid}`,"cross");
+                });
             };
 
             // Auto-solve when quotes change (if spread is configured)
