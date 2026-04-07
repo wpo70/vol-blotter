@@ -2491,7 +2491,10 @@ export default function App() {
   const [otmFilterMins, setOtmFilterMins] = useState(null);
   const [otmSortDir,    setOtmSortDir]    = useState("desc");
   const [otmForm,    setOtmForm]         = useState({exp:"1m",ten:"10Y",strike:"",type:"Payer",side:"bid",price:"",bank:""});
-  const [showOtmForm, setShowOtmForm]     = useState(true); // desc=newest first, asc=oldest first
+  const [showOtmForm, setShowOtmForm]     = useState(true);
+  const [showHistPanel,  setShowHistPanel]  = useState(true);
+  const [showOtmPanel,   setShowOtmPanel]   = useState(true);
+  const [showSpreadPanel,setShowSpreadPanel] = useState(true); // desc=newest first, asc=oldest first
   const [viewMode, setViewMode]           = useState("premium");
   const [hiddenExpiries, setHiddenExpiries] = useState(new Set());
   const [showExpMgr, setShowExpMgr]       = useState(false);
@@ -3125,6 +3128,9 @@ export default function App() {
           <button className={`btn${showExpMgr?" on":""}`} onClick={()=>setShowExpMgr(v=>!v)}>
             EXPIRIES {hiddenExpiries.size>0?`(${hiddenExpiries.size} hidden)`:""}
           </button>
+          <button className={`btn${showHistPanel?" on":""}`} onClick={()=>setShowHistPanel(v=>!v)}>HIST</button>
+          <button className={`btn${showOtmPanel?" on":""}`} onClick={()=>setShowOtmPanel(v=>!v)}>OTM</button>
+          <button className={`btn${showSpreadPanel?" on":""}`} onClick={()=>setShowSpreadPanel(v=>!v)}>SPRD</button>
           <button onClick={()=>setViewMode(v=>v==="vol"?"premium":"vol")}
             style={{background:viewMode==="premium"?"rgba(180,130,20,.25)":"rgba(30,50,80,.3)",border:`1px solid ${viewMode==="premium"?"rgba(200,160,40,.5)":"#253a52"}`,color:viewMode==="premium"?"#d4aa30":"#508090",padding:"3px 10px",borderRadius:3,cursor:"pointer",fontSize:9,fontFamily:"inherit",letterSpacing:".08em"}}>
             {viewMode==="vol"?"bpVOL":"bpPREM"}
@@ -3419,7 +3425,7 @@ export default function App() {
         </div>
 
         {/* RIGHT PANEL */}
-        <div style={{width:"22%",minWidth:220,maxWidth:300,background:"#080c14",borderLeft:"1px solid #1e3450",display:"flex",flexDirection:"column",flexShrink:0}}>
+        {showHistPanel&&<div style={{width:"22%",minWidth:220,maxWidth:300,background:"#080c14",borderLeft:"1px solid #1e3450",display:"flex",flexDirection:"column",flexShrink:0}}>
           <div style={{padding:"8px 14px",borderBottom:"1px solid #1e3450",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <span style={{color:"#60a0c8",fontSize:9,fontWeight:700,letterSpacing:".12em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:120}}>QUOTE HISTORY{filterBank?` · ${filterBank}`:""}</span>
             <div style={{display:"flex",gap:6,alignItems:"center"}}>
@@ -3487,10 +3493,10 @@ export default function App() {
           <div style={{padding:"7px 14px",borderTop:"1px solid #1e3450",fontSize:8,color:"#243c54",letterSpacing:".07em"}}>
             INDICATIVE ONLY · NOT FOR EXECUTION · {now.toLocaleDateString("en-GB")}
           </div>
-        </div>
+        </div>}
 
         {/* OTM STRUCTURES PANEL */}
-        <div style={{width:"22%",minWidth:220,maxWidth:300,background:"#080c14",borderLeft:"1px solid #1e3450",display:"flex",flexDirection:"column",height:"100%",overflow:"hidden"}}>
+        {showOtmPanel&&<div style={{width:"22%",minWidth:220,maxWidth:300,background:"#080c14",borderLeft:"1px solid #1e3450",display:"flex",flexDirection:"column",height:"100%",overflow:"hidden"}}>
           <div style={{padding:"8px 14px",borderBottom:"1px solid #1e3450",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
             <span style={{color:"#60a0c8",fontSize:9,fontWeight:700,letterSpacing:".12em"}}>OTM STRUCTURES</span>
             <div style={{display:"flex",gap:8,alignItems:"center"}}>
@@ -3572,7 +3578,7 @@ export default function App() {
           </div>}
 
           {/* LIST */}
-          <div style={{flex:"0 1 auto",maxHeight:200,overflow:"auto"}}>
+          <div style={{flex:1,overflow:"auto"}}>
             {displayOtm.length===0
               ? <div style={{padding:"24px 14px",color:"#1e3048",fontSize:10,textAlign:"center"}}>{otmQuotes.length>0?"No matches":"No structures yet"}</div>
               : displayOtm.map(q=>(
@@ -3581,6 +3587,17 @@ export default function App() {
             }
           </div>
 
+          <div style={{padding:"7px 14px",borderTop:"1px solid #1e3450",fontSize:8,color:"#243c54",letterSpacing:".07em",flexShrink:0}}>
+            OTM · INDICATIVE ONLY
+          </div>
+        </div>}
+
+        {/* SPREADS PANEL */}
+        {showSpreadPanel&&<div style={{width:"22%",minWidth:220,maxWidth:300,background:"#080c14",borderLeft:"1px solid #1e3450",display:"flex",flexDirection:"column",height:"100%",overflow:"hidden"}}>
+          <div style={{padding:"8px 14px",borderBottom:"1px solid #1e3450",flexShrink:0}}>
+            <span style={{color:"#a070d0",fontSize:9,fontWeight:700,letterSpacing:".12em"}}>LEGGED SPREADS</span>
+          </div>
+          <div style={{flex:1,overflow:"auto"}}>
           {/* LEGGED SPREAD */}
           {(()=>{
             const iS={background:"#060a10",border:"1px solid #2a3860",color:"#b0bcc8",fontSize:8,borderRadius:2,padding:"2px 3px",fontFamily:"inherit",outline:"none"};
@@ -3745,10 +3762,10 @@ export default function App() {
             );
           })()}
 
-          <div style={{padding:"7px 14px",borderTop:"1px solid #1e3450",fontSize:8,color:"#243c54",letterSpacing:".07em",flexShrink:0}}>
-            OTM · INDICATIVE ONLY
+
           </div>
-        </div>
+          <div style={{padding:"5px 10px",borderTop:"1px solid #1e3450",fontSize:7,color:"#1e3048",letterSpacing:".07em",flexShrink:0}}>SPREADS · INDICATIVE ONLY</div>
+        </div>}
 
       </div>
     </div>
