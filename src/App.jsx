@@ -1130,36 +1130,7 @@ function CapFloorPanel({ ccy, subMenu, hiddenSt, setHiddenSt, cfLiveRef, cfEodRe
   },[ccy]);
 
   // Session boundary check — AUD 08:30-16:30 Sydney, others midnight UTC
-  React.useEffect(()=>{
-    const checkSession = () => {
-      const nowUtc = new Date();
-      let isActive;
-      if(ccy==="AUD"){
-        // Sydney = UTC+11 (AEDT) or UTC+10 (AEST) — use Intl to get local Sydney hour
-        // Use Intl.DateTimeFormat for reliable parsing (avoids AM/PM locale issues)
-        const sydParts = new Intl.DateTimeFormat("en-AU",{timeZone:"Australia/Sydney",hour:"2-digit",minute:"2-digit",hour12:false}).formatToParts(nowUtc);
-        const sydHH = parseInt(sydParts.find(p=>p.type==="hour")?.value||"0",10);
-        const sydMM = parseInt(sydParts.find(p=>p.type==="minute")?.value||"0",10);
-        const mins = sydHH*60+sydMM;
-        isActive = mins>=420 && mins<1110; // 07:00=420 to 18:30=1110 Sydney
-      } else {
-        const utcHour = nowUtc.getUTCHours(), utcMin = nowUtc.getUTCMinutes();
-        isActive = !(utcHour===0 && utcMin<2); // active except first 2 mins of UTC day
-      }
-      if(!isActive){
-        // Archive current quotes to prevSession if there's anything live
-        setCfQuotes(cur=>{
-          const hasLive = Object.values(cur).some(c=>c.bids?.length>0||c.offers?.length>0);
-          if(hasLive) setPrevSession(cur);
-          return initQ();
-        });
-        setCfLog([]);
-      }
-    };
-    checkSession();
-    const id = setInterval(checkSession, 60000);
-    return ()=>clearInterval(id);
-  },[ccy]);
+  // Session wipe removed — quotes and history persist permanently
 
   // Override cfStrike with live data when available
   React.useEffect(() => {
@@ -3583,149 +3554,153 @@ export default function App() {
             const ALL_TEN=["1Y","2Y","3Y","4Y","5Y","7Y","10Y","12Y","15Y","20Y","25Y","30Y"];
             const upd=(i,f,v)=>setSpreadLegs(p=>p.map((l,j)=>j===i?{...l,[f]:v}:l));
 
-            // Get live best bid/offer from whiteboard for a leg
+            // Pull best live bid/offer from whiteboard - use lowercase exp key
             const getLive=(exp,ten)=>{
-              const k=cellKey(exp,ten);
+              const k=cellKey(exp.toLowerCase(),ten);
               const cell=quotes[k];
               if(!cell) return {bid:null,offer:null};
-              const bids=(cell.bids||[]).filter(q=>!isReferred(k,"bids",q.id)).sort((a,b)=>b.price-a.price);
-              const offers=(cell.offers||[]).filter(q=>!isReferred(k,"offers",q.id)).sort((a,b)=>a.price-b.price);
-              return {bid:bids[0]?.price??null, offer:offers[0]?.price??null};
+              const b=(cell.bids||[]).filter(q=>!isReferred(k,"bids",q.id)).sort((a,b)=>b.price-a.price);
+              const o=(cell.offers||[]).filter(q=>!isReferred(k,"offers",q.id)).sort((a,b)=>a.price-b.price);
+              return {bid:b[0]?.price??null, offer:o[0]?.price??null};
             };
 
-            const solve=()=>{
-              setSpreadResult(null);
+            const solveSpread=()=>{
+              setSpreadResult(null); setSpreadImplied({});
               const p=spreadLegs.map(l=>{
                 const live=getLive(l.exp,l.ten);
                 return {...l,
                   spxN:   l.spreadPx!==''?parseFloat(l.spreadPx):null,
                   ratioN: l.ratio!==''?parseFloat(l.ratio):null,
-                  liveBid: live.bid, liveOffer: live.offer,
+                  liveBid:live.bid, liveOffer:live.offer,
                 };
               });
-              if(p.some(l=>l.spxN==null||l.ratioN==null)){setSpreadResult({err:"Enter spread px and ratio for all legs"});return;}
+              if(p.some(l=>l.spxN==null||l.ratioN==null)){setSpreadResult({err:"Enter spread px + ratio for all legs"});return;}
               if(p.length===2){
                 const [l0,l1]=p;
-                // ratio: l0.ratioN x l0 vs l1.ratioN x l1
-                // 1bp in l0 = (l0.ratioN/l1.ratioN) bp in l1 ... wait
-                // User says 8:1 = 8x1y1y v 1x1y10y, so L0 ratio=8, L1 ratio=1
-                // 1bp in l0 → (1/8)bp... no
-                // Actually: if L0 moves Δ, L1 moves Δ * (l0.ratioN/l1.ratioN)
-                // Check: 74-73.5=0.5 in L0 (r=8) → L1 moves 0.5*(8/1)=4 → 525+4=529 ✓
+                // R = l0.ratioN / l1.ratioN  eg 8/1 = 8 → 1bp in L0 = 8bp in L1
                 const R=l0.ratioN/l1.ratioN;
-                const imp={};
-                const rows=[];
-                // L0 live bid → implied L1 offer (L0 sells/bids, L1 must offer tighter)
+                const imp={}; const rows=[];
+                // L0 bids → L1 implied offer
                 if(l0.liveBid!=null){
-                  const d=l0.liveBid-l0.spxN; const v=+(l1.spxN+d*R).toFixed(4);
-                  rows.push({lbl:`L0 bids ${l0.liveBid}`,legLbl:`${l1.exp.toUpperCase()}×${l1.ten}`,val:v,side:"offer"});
-                  imp[`${l1.exp}|${l1.ten}`]={...(imp[`${l1.exp}|${l1.ten}`]||{}),offer:v};
+                  const v=+(l1.spxN+(l0.liveBid-l0.spxN)*R).toFixed(4);
+                  rows.push({lbl:`L0 bids ${l0.liveBid}`,legLbl:`${l0.exp.toUpperCase()}×${l0.ten}→${l1.exp.toUpperCase()}×${l1.ten}`,val:v,side:"offer"});
+                  imp[`${l0.exp.toLowerCase()}|${l1.ten}`]=undefined; // not this one
+                  if(!imp[`${l1.exp.toLowerCase()}|${l1.ten}`]) imp[`${l1.exp.toLowerCase()}|${l1.ten}`]={};
+                  imp[`${l1.exp.toLowerCase()}|${l1.ten}`].offer=v;
                 }
-                // L0 live offer → implied L1 bid
+                // L0 lifts → L1 implied bid
                 if(l0.liveOffer!=null){
-                  const d=l0.liveOffer-l0.spxN; const v=+(l1.spxN+d*R).toFixed(4);
-                  rows.push({lbl:`L0 lifts ${l0.liveOffer}`,legLbl:`${l1.exp.toUpperCase()}×${l1.ten}`,val:v,side:"bid"});
-                  imp[`${l1.exp}|${l1.ten}`]={...(imp[`${l1.exp}|${l1.ten}`]||{}),bid:v};
+                  const v=+(l1.spxN+(l0.liveOffer-l0.spxN)*R).toFixed(4);
+                  rows.push({lbl:`L0 lifts ${l0.liveOffer}`,legLbl:`${l0.exp.toUpperCase()}×${l0.ten}→${l1.exp.toUpperCase()}×${l1.ten}`,val:v,side:"bid"});
+                  if(!imp[`${l1.exp.toLowerCase()}|${l1.ten}`]) imp[`${l1.exp.toLowerCase()}|${l1.ten}`]={};
+                  imp[`${l1.exp.toLowerCase()}|${l1.ten}`].bid=v;
                 }
-                // L1 live bid → implied L0 offer
+                // L1 bids → L0 implied offer
                 if(l1.liveBid!=null){
-                  const d=l1.liveBid-l1.spxN; const v=+(l0.spxN+d/R).toFixed(4);
-                  rows.push({lbl:`L1 bids ${l1.liveBid}`,legLbl:`${l0.exp.toUpperCase()}×${l0.ten}`,val:v,side:"offer"});
-                  imp[`${l0.exp}|${l0.ten}`]={...(imp[`${l0.exp}|${l0.ten}`]||{}),offer:v};
+                  const v=+(l0.spxN+(l1.liveBid-l1.spxN)/R).toFixed(4);
+                  rows.push({lbl:`L1 bids ${l1.liveBid}`,legLbl:`${l1.exp.toUpperCase()}×${l1.ten}→${l0.exp.toUpperCase()}×${l0.ten}`,val:v,side:"offer"});
+                  if(!imp[`${l0.exp.toLowerCase()}|${l0.ten}`]) imp[`${l0.exp.toLowerCase()}|${l0.ten}`]={};
+                  imp[`${l0.exp.toLowerCase()}|${l0.ten}`].offer=v;
                 }
-                // L1 live offer → implied L0 bid
+                // L1 lifts → L0 implied bid
                 if(l1.liveOffer!=null){
-                  const d=l1.liveOffer-l1.spxN; const v=+(l0.spxN+d/R).toFixed(4);
-                  rows.push({lbl:`L1 lifts ${l1.liveOffer}`,legLbl:`${l0.exp.toUpperCase()}×${l0.ten}`,val:v,side:"bid"});
-                  imp[`${l0.exp}|${l0.ten}`]={...(imp[`${l0.exp}|${l0.ten}`]||{}),bid:v};
+                  const v=+(l0.spxN+(l1.liveOffer-l1.spxN)/R).toFixed(4);
+                  rows.push({lbl:`L1 lifts ${l1.liveOffer}`,legLbl:`${l1.exp.toUpperCase()}×${l1.ten}→${l0.exp.toUpperCase()}×${l0.ten}`,val:v,side:"bid"});
+                  if(!imp[`${l0.exp.toLowerCase()}|${l0.ten}`]) imp[`${l0.exp.toLowerCase()}|${l0.ten}`]={};
+                  imp[`${l0.exp.toLowerCase()}|${l0.ten}`].bid=v;
                 }
-                // Also check manual overrides if no live prices
                 setSpreadImplied(imp);
-                const res={type:"2",rows,l0,l1,R,
-                  label:`${l0.ratioN}:${l1.ratioN} · ${l0.exp.toUpperCase()}×${l0.ten} spx${l0.spxN} v ${l1.exp.toUpperCase()}×${l1.ten} spx${l1.spxN}`};
+                const res={type:"2",rows,l0,l1,R,name:spreadName||`${l0.ratioN}:${l1.ratioN} ${l0.exp.toUpperCase()}×${l0.ten} v ${l1.exp.toUpperCase()}×${l1.ten}`,ts:new Date().toISOString()};
                 setSpreadResult(res);
-                // Save to log
-                if(rows.length>0){
-                  setSpreadLog(prev=>[{id:Date.now(),name:spreadName||res.label,ts:new Date().toISOString(),rows,label:res.label},...prev].slice(0,100));
-                }
+                if(rows.length>0) setSpreadLog(prev=>[{id:Date.now(),...res},...prev].slice(0,20));
               }
             };
 
-            const liveInfo=(exp,ten)=>{
-              const {bid,offer}=getLive(exp,ten);
-              if(bid==null&&offer==null) return null;
-              return `${bid??'—'}/${offer??'—'}`;
-            };
-
             return (
-              <div style={{borderTop:"2px solid #2a1a4a",padding:"6px 10px 8px",background:"rgba(20,5,35,.4)",flexShrink:0}}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+              <div style={{borderTop:"2px solid #2a1a4a",padding:"6px 10px 8px",background:"rgba(20,5,35,.5)",flexShrink:0,overflow:"auto",maxHeight:380}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:5}}>
                   <span style={{color:"#a070d0",fontSize:9,fontWeight:700,letterSpacing:".1em"}}>LEGGED SPREAD</span>
                   <div style={{display:"flex",gap:3}}>
                     {spreadResult&&<button onClick={()=>{setSpreadResult(null);setSpreadImplied({});}} style={{...iS,color:"#a04040",borderColor:"#3a1a1a",padding:"1px 5px"}}>CLR</button>}
-                    {spreadLegs.length<3&&<button onClick={()=>setSpreadLegs(p=>[...p,{exp:"1y",ten:"1Y",spreadPx:"",ratio:"1"}])} style={{...iS,color:"#5a96c8",padding:"1px 5px"}}>+</button>}
+                    {spreadLegs.length<3&&<button onClick={()=>setSpreadLegs(p=>[...p,{exp:"1y",ten:"1Y",spreadPx:"",ratio:"1"}])} style={{...iS,color:"#5a96c8",padding:"1px 5px"}}>+LEG</button>}
+                    {spreadLegs.length>2&&<button onClick={()=>{setSpreadLegs(p=>p.slice(0,-1));}} style={{...iS,color:"#a04040",padding:"1px 4px"}}>-</button>}
                   </div>
                 </div>
+
+                {/* Spread name */}
                 <input value={spreadName} onChange={e=>setSpreadName(e.target.value)}
-                  placeholder="Spread name e.g. 1y1y v 1y10y"
-                  style={{...iS,width:"100%",marginBottom:5,color:"#80b8d8"}}/>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 36px 22px",gap:2,marginBottom:2}}>
-                  {["EXP","TEN","SPX","R"].map(h=><span key={h} style={{color:"#6a3090",fontSize:7,fontWeight:700}}>{h}</span>)}
+                  placeholder="Spread name e.g. 1y1y v 1y10y 8:1"
+                  style={{...iS,width:"100%",marginBottom:5,color:"#c080f0",fontSize:9,padding:"3px 5px"}}/>
+
+                {/* Column headers */}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 34px 34px 22px",gap:2,marginBottom:2}}>
+                  {["EXP","TEN","SPX","LIVE","R"].map(h=><span key={h} style={{color:"#6a3090",fontSize:7,fontWeight:700}}>{h}</span>)}
                 </div>
+
+                {/* Legs */}
                 {spreadLegs.map((l,i)=>{
-                  const live=liveInfo(l.exp,l.ten);
+                  const live=getLive(l.exp,l.ten);
+                  const liveStr=live.bid!=null||live.offer!=null?`${live.bid??'—'}/${live.offer??'—'}`:null;
                   return (
-                    <div key={i}>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 36px 22px",gap:2,marginBottom:1,alignItems:"center"}}>
-                        <select value={l.exp} onChange={e=>upd(i,"exp",e.target.value)} style={{...iS}}>
-                          {ALL_EXP.map(e=><option key={e}>{e.toUpperCase()}</option>)}
+                    <div key={i} style={{marginBottom:4}}>
+                      <div style={{display:"flex",alignItems:"center",gap:2,marginBottom:1}}>
+                        <span style={{color:"#6a3090",fontSize:7,width:14}}>L{i+1}</span>
+                        <select value={l.exp} onChange={e=>upd(i,"exp",e.target.value)} style={{...iS,flex:1}}>
+                          {ALL_EXP.map(e=><option key={e} value={e}>{e.toUpperCase()}</option>)}
                         </select>
-                        <select value={l.ten} onChange={e=>upd(i,"ten",e.target.value)} style={{...iS}}>
-                          {ALL_TEN.map(t=><option key={t}>{t}</option>)}
+                        <select value={l.ten} onChange={e=>upd(i,"ten",e.target.value)} style={{...iS,flex:1}}>
+                          {ALL_TEN.map(t=><option key={t} value={t}>{t}</option>)}
                         </select>
                         <input value={l.spreadPx} onChange={e=>upd(i,"spreadPx",e.target.value)}
-                          placeholder="spx" style={{...iS,color:"#c080f0",fontWeight:700,textAlign:"center",width:"100%"}}
-                          onKeyDown={e=>e.key==="Enter"&&solve()}/>
+                          placeholder="spx" style={{...iS,width:34,color:"#c080f0",fontWeight:700,textAlign:"center"}}
+                          onKeyDown={e=>e.key==="Enter"&&solveSpread()}/>
+                        <span style={{color:liveStr?"#3a2060":"#1e1a2e",fontSize:7,width:34,textAlign:"center",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={liveStr||"no live"}>
+                          {liveStr||"—"}
+                        </span>
                         <input value={l.ratio} onChange={e=>upd(i,"ratio",e.target.value)}
-                          placeholder="R" style={{...iS,color:"#a070d0",fontWeight:700,textAlign:"center",width:"100%"}}
-                          onKeyDown={e=>e.key==="Enter"&&solve()}/>
+                          placeholder="R" style={{...iS,width:22,color:"#a070d0",fontWeight:700,textAlign:"center"}}
+                          onKeyDown={e=>e.key==="Enter"&&solveSpread()}/>
                       </div>
-                      {live&&<div style={{color:"#3a2060",fontSize:7,marginBottom:3,marginLeft:2}}>live: {live}</div>}
                     </div>
                   );
                 })}
-                <button onClick={solve} style={{width:"100%",background:"rgba(60,10,100,.5)",border:"1px solid #5a20a0",color:"#c080f0",borderRadius:2,padding:"3px 0",fontSize:8,fontFamily:"inherit",cursor:"pointer",marginBottom:4}}>SOLVE</button>
-                {spreadResult?.err&&<div style={{color:"#a04040",fontSize:8,textAlign:"center"}}>{spreadResult.err}</div>}
+
+                <button onClick={solveSpread} style={{width:"100%",background:"rgba(60,10,100,.6)",border:"1px solid #7a30c0",color:"#d090f0",borderRadius:2,padding:"4px 0",fontSize:9,fontFamily:"inherit",cursor:"pointer",letterSpacing:".08em",marginBottom:5}}>SOLVE</button>
+
+                {spreadResult?.err&&<div style={{color:"#a04040",fontSize:8,textAlign:"center",marginBottom:4}}>{spreadResult.err}</div>}
+
+                {spreadResult?.type==="2"&&spreadResult.rows.length===0&&<div style={{color:"#3a2060",fontSize:8,textAlign:"center"}}>No live prices on grid for these legs</div>}
+
                 {spreadResult?.type==="2"&&spreadResult.rows.length>0&&(
-                  <div style={{background:"rgba(40,10,60,.3)",border:"1px solid #3a1a5a",borderRadius:2,padding:"5px 7px"}}>
-                    <div style={{color:"#7a40a0",fontSize:7,marginBottom:4}}>{spreadResult.label}</div>
+                  <div style={{background:"rgba(40,10,60,.4)",border:"1px solid #4a20a0",borderRadius:3,padding:"6px 8px",marginBottom:5}}>
+                    <div style={{color:"#8040b0",fontSize:7,marginBottom:5,fontWeight:700}}>{spreadResult.name} · ratio {spreadResult.l0.ratioN}:{spreadResult.l1.ratioN}</div>
                     {spreadResult.rows.map((r,i)=>(
-                      <div key={i} style={{display:"flex",alignItems:"baseline",gap:4,marginBottom:3}}>
-                        <span style={{color:"#4a2070",fontSize:7,minWidth:90}}>{r.lbl}</span>
-                        <span style={{color:"#6a3090",fontSize:7}}>→ {r.legLbl}</span>
-                        <span style={{color:r.side==="bid"?"#00c040":"#ff8c00",fontWeight:700,fontSize:12,marginLeft:4}}>{r.val}</span>
+                      <div key={i} style={{display:"flex",alignItems:"baseline",gap:4,marginBottom:3,paddingBottom:3,borderBottom:i<spreadResult.rows.length-1?"1px solid #2a1050":"none"}}>
+                        <span style={{color:"#4a2070",fontSize:7,flex:1}}>{r.lbl}</span>
+                        <span style={{color:r.side==="bid"?"#00c040":"#ff8c00",fontWeight:700,fontSize:13}}>{r.val}</span>
                         <span style={{color:"#6a3090",fontSize:7}}>{r.side}</span>
                       </div>
                     ))}
-                    <div style={{color:"#2a0a40",fontSize:7,marginTop:2}}>ratio {spreadResult.l0.ratioN}:{spreadResult.l1.ratioN} · purple on grid</div>
+                    <div style={{color:"#2a1050",fontSize:7,marginTop:3}}>1bp L0 = {spreadResult.R.toFixed(2)}bp L1 · purple on grid</div>
                   </div>
                 )}
+
                 {/* History */}
                 {spreadLog.length>0&&(
-                  <div style={{marginTop:5}}>
+                  <div>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
-                      <span style={{color:"#5a3080",fontSize:7,fontWeight:700}}>HISTORY</span>
-                      <button onClick={()=>setSpreadLog([])} style={{...iS,color:"#4a2020",borderColor:"#3a1a1a",padding:"0 4px",fontSize:7}}>CLEAR</button>
+                      <span style={{color:"#5a3080",fontSize:7,fontWeight:700,letterSpacing:".06em"}}>HISTORY</span>
+                      <button onClick={()=>setSpreadLog([])} style={{...iS,color:"#4a2020",borderColor:"#2a1010",padding:"0 4px",fontSize:6}}>CLR</button>
                     </div>
-                    {spreadLog.slice(0,5).map(h=>(
-                      <div key={h.id} style={{background:"rgba(20,5,30,.5)",border:"1px solid #2a1a4a",borderRadius:2,padding:"3px 6px",marginBottom:3,cursor:"pointer"}}
+                    {spreadLog.slice(0,8).map(h=>(
+                      <div key={h.id} style={{background:"rgba(20,5,30,.6)",border:"1px solid #2a1a4a",borderRadius:2,padding:"3px 6px",marginBottom:2,cursor:"pointer"}}
                         onClick={()=>{
+                          // Reload this spread into the solver display
+                          setSpreadResult({type:"2",rows:h.rows,l0:h.l0,l1:h.l1,R:h.R,name:h.name,ts:h.ts});
                           setSpreadName(h.name);
-                          setSpreadResult({type:"2",rows:h.rows,label:h.label,l0:{ratioN:0},l1:{ratioN:0},R:0});
-                          setSpreadImplied({});
                         }}>
-                        <div style={{color:"#7a40a0",fontSize:7,fontWeight:700}}>{h.name}</div>
-                        <div style={{color:"#3a2060",fontSize:6}}>{new Date(h.ts).toLocaleTimeString("en-GB",{hour12:false})}</div>
+                        <div style={{color:"#7a40a0",fontSize:7,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{h.name}</div>
+                        <div style={{color:"#2a1040",fontSize:6}}>{new Date(h.ts).toLocaleTimeString("en-GB",{hour12:false})}</div>
                       </div>
                     ))}
                   </div>
