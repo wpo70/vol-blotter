@@ -2491,12 +2491,13 @@ export default function App() {
   const [filterTen,  setFilterTen]        = useState(null);
   const [filterMins, setFilterMins]       = useState(null);
   const [sortDir,    setSortDir]          = useState("desc");
-  const [spreadLegs, setSpreadLegs] = useState([
-    {name:"",exp:"1y",ten:"1Y",bid:"",offer:"",ratio:"1"},
-    {name:"",exp:"1y",ten:"10Y",bid:"",offer:"",ratio:""}
+  const [spreadName,   setSpreadName]   = useState("");
+  const [spreadLegs,   setSpreadLegs]   = useState([
+    {exp:"1y", ten:"1Y",  spreadPx:"", ratio:"1", mktBid:"", mktOffer:""},
+    {exp:"1y", ten:"10Y", spreadPx:"", ratio:"8", mktBid:"", mktOffer:""}
   ]);
   const [spreadImplied, setSpreadImplied] = useState({});
-  const [spreadResult, setSpreadResult] = useState(null);
+  const [spreadResult,  setSpreadResult]  = useState(null);
   const [otmQuotes,  setOtmQuotes]       = useState(() => {
     return loadLS("vbl_otm2",[]).map(q=>({...q, ts:new Date(q.ts), counters:(q.counters||[]).map(c=>({...c,ts:new Date(c.ts)}))}));
   });
@@ -3391,8 +3392,8 @@ export default function App() {
 
                             {(()=>{const spr=spreadImplied[`${exp}|${ten}`];if(!spr)return null;return(
                               <div style={{borderTop:"1px solid #2a1a4a",marginTop:2,paddingTop:2,textAlign:"center"}}>
-                                {spr.bid!=null&&<div style={{color:"#c080f0",fontWeight:700,fontSize:9}}>{spr.bid.toFixed(4)}<span style={{color:"#6a3090",fontSize:7,marginLeft:2}}>↑spr</span></div>}
-                                {spr.offer!=null&&<div style={{color:"#a060d0",fontWeight:700,fontSize:9}}>{spr.offer.toFixed(4)}<span style={{color:"#6a3090",fontSize:7,marginLeft:2}}>↓spr</span></div>}
+                                {spr.bid!=null&&<div style={{color:"#c080f0",fontWeight:700,fontSize:10}}>{spr.bid.toFixed(4)}<span style={{color:"#6a3090",fontSize:7,marginLeft:2}}>leg</span></div>}
+                                {spr.offer!=null&&<div style={{color:"#9050d0",fontWeight:700,fontSize:10}}>{spr.offer.toFixed(4)}<span style={{color:"#6a3090",fontSize:7,marginLeft:2}}>leg</span></div>}
                               </div>);})()}
                             {isHov && (hasBid||hasOff) && (
                               <div style={{textAlign:"center",marginTop:1}}>
@@ -3573,104 +3574,113 @@ export default function App() {
             }
           </div>
 
-          {/* ── SPREADS ── */}
-          <div style={{borderTop:"1px solid #1e3450",flexShrink:0,padding:"6px 10px 8px"}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:5}}>
-              <span style={{color:"#60a0c8",fontSize:9,fontWeight:700,letterSpacing:".1em"}}>SPREADS</span>
-              <div style={{display:"flex",gap:4}}>
-                {spreadResult&&<button onClick={()=>{setSpreadResult(null);setSpreadImplied({});}} style={{background:"rgba(60,20,20,.4)",border:"1px solid #4a2020",color:"#a04040",padding:"1px 5px",borderRadius:2,cursor:"pointer",fontSize:7,fontFamily:"inherit"}}>CLR</button>}
-                {spreadLegs.length<3&&<button onClick={()=>setSpreadLegs(p=>[...p,{name:"",exp:"1y",ten:"1Y",bid:"",offer:"",ratio:""}])} style={{background:"rgba(20,45,80,.6)",border:"1px solid #2e4e78",color:"#5a96c8",padding:"1px 5px",borderRadius:2,cursor:"pointer",fontSize:7,fontFamily:"inherit"}}>+LEG</button>}
-                {spreadLegs.length>2&&<button onClick={()=>{setSpreadLegs(p=>p.slice(0,-1));setSpreadResult(null);setSpreadImplied({});}} style={{background:"rgba(60,20,20,.4)",border:"1px solid #4a2020",color:"#a04040",padding:"1px 4px",borderRadius:2,cursor:"pointer",fontSize:7,fontFamily:"inherit"}}>-LEG</button>}
-              </div>
-            </div>
-            {/* Spread name */}
-            <input value={spreadLegs[0]?.name||""} onChange={e=>setSpreadLegs(p=>p.map((l,i)=>i===0?{...l,name:e.target.value}:l))}
-              placeholder="Spread name e.g. 1y1y v 1y10y" style={{background:"#060a10",border:"1px solid #2a4870",color:"#80b8d8",fontSize:8,borderRadius:2,padding:"2px 5px",fontFamily:"inherit",outline:"none",width:"100%",marginBottom:5}}/>
-            {/* Leg inputs */}
-            {(()=>{
-              const iS={background:"#060a10",border:"1px solid #2a4870",color:"#b0bcc8",fontSize:8,borderRadius:2,padding:"2px 3px",fontFamily:"inherit",outline:"none"};
-              const ALL_EXP=["1w","1m","2m","3m","6m","9m","1y","18m","2y","3y","4y","5y","6y","7y","8y","9y","10y","12y","15y","20y","25y","30y"];
-              const ALL_TEN=["1Y","2Y","3Y","4Y","5Y","7Y","10Y","12Y","15Y","20Y","25Y","30Y"];
-              const upd=(i,f,v)=>setSpreadLegs(p=>p.map((l,j)=>j===i?{...l,[f]:v}:l));
-              const solveSpread=()=>{
-                setSpreadResult(null);
-                const p=spreadLegs.map(l=>({...l,
-                  bidN:l.bid!==''?parseFloat(l.bid):null,
-                  offerN:l.offer!==''?parseFloat(l.offer):null,
-                  ratioN:l.ratio!==''?parseFloat(l.ratio):null,
-                  mid:(l.bid!==''&&l.offer!=='')?( parseFloat(l.bid)+parseFloat(l.offer))/2:null,
-                }));
-                if(p.some(l=>l.ratioN==null)){setSpreadResult({err:"Enter ratios"});return;}
-                if(p.some(l=>l.mid==null)){setSpreadResult({err:"Enter bid/offer for all legs"});return;}
-                if(p.length===2){
-                  const [l0,l1]=p;
-                  const R=l1.ratioN/l0.ratioN;
-                  const spreadMid=(l0.mid-l1.mid/R).toFixed(3);
-                  const l2bL1=(l1.mid+(l0.bidN-l0.mid)*R).toFixed(4);
-                  const l2lL1=(l1.mid+(l0.offerN-l0.mid)*R).toFixed(4);
-                  const l1bL2=(l0.mid+(l1.bidN-l1.mid)/R).toFixed(4);
-                  const l1lL2=(l0.mid+(l1.offerN-l1.mid)/R).toFixed(4);
-                  setSpreadResult({type:"2",spreadMid,R,l0,l1,l2bL1,l2lL1,l1bL2,l1lL2});
-                  setSpreadImplied({
-                    [`${l0.exp}|${l0.ten}`]:{bid:parseFloat(l1lL2),offer:parseFloat(l1bL2)},
-                    [`${l1.exp}|${l1.ten}`]:{bid:parseFloat(l2lL1),offer:parseFloat(l2bL1)},
-                  });
-                } else {
-                  const [l0,l1,l2]=p;
-                  const flyMid=(l0.mid*l0.ratioN-l1.mid*l1.ratioN+l2.mid*l2.ratioN).toFixed(3);
-                  setSpreadResult({type:"3",flyMid});setSpreadImplied({});
+          {/* LEGGED SPREAD */}
+          {(()=>{
+            const iS={background:"#060a10",border:"1px solid #2a3860",color:"#b0bcc8",fontSize:8,borderRadius:2,padding:"2px 3px",fontFamily:"inherit",outline:"none"};
+            const ALL_EXP=["1w","1m","2m","3m","6m","9m","1y","18m","2y","3y","4y","5y","6y","7y","8y","9y","10y","12y","15y","20y","25y","30y"];
+            const ALL_TEN=["1Y","2Y","3Y","4Y","5Y","7Y","10Y","12Y","15Y","20Y","25Y","30Y"];
+            const upd=(i,f,v)=>setSpreadLegs(p=>p.map((l,j)=>j===i?{...l,[f]:v}:l));
+            const solve=()=>{
+              // Each leg has a locked spread price and a ratio
+              // When one leg trades at its spread px, the other leg's implied px = spreadPx_other + delta * ratio_other/ratio_this
+              // where delta = tradePx - spreadPx_this
+              // We solve: for each possible trade on any leg (bid or offer from live mkt),
+              // what implied price does the other leg need?
+              const p=spreadLegs.map(l=>({
+                ...l,
+                spxN:   l.spreadPx!==''?parseFloat(l.spreadPx):null,
+                ratioN: l.ratio!==''?parseFloat(l.ratio):null,
+                bidN:   l.mktBid!==''?parseFloat(l.mktBid):null,
+                offerN: l.mktOffer!==''?parseFloat(l.mktOffer):null,
+              }));
+              if(p.length<2||p.some(l=>l.spxN==null||l.ratioN==null)){setSpreadResult({err:"Enter spread px and ratio for all legs"});return;}
+              if(p.length===2){
+                const [l0,l1]=p;
+                const R1=l1.ratioN/l0.ratioN; // bp move in l1 per 1bp in l0
+                const imp={};
+                // If L0 trades at its market bid → delta = bid - spreadPx, L1 implied offer = l1.spxN - delta*R1
+                // If L0 trades at its market offer → delta = offer - spreadPx, L1 implied bid = l1.spxN - delta*R1
+                // (same direction: if L0 improves by Δ, L1 improves by Δ*R in opposite side direction)
+                const rows=[];
+                if(l0.bidN!=null){
+                  const d=l0.bidN-l0.spxN;
+                  const l1impl=+(l1.spxN+d*R1).toFixed(4);
+                  rows.push({lbl:`L0 bids ${l0.bidN}`,leg:"L1",val:l1impl,side:"offer"});
+                  imp[`${l1.exp}|${l1.ten}`]={...(imp[`${l1.exp}|${l1.ten}`]||{}), offer:l1impl};
                 }
-              };
-              return (<>
-                <div style={{display:"grid",gridTemplateColumns:"20px 1fr 1fr 28px 28px 22px",gap:2,marginBottom:2}}>
-                  {["","EXP","TEN","BID","OFR","R"].map(h=><span key={h} style={{color:"#3a6080",fontSize:7}}>{h}</span>)}
+                if(l0.offerN!=null){
+                  const d=l0.offerN-l0.spxN;
+                  const l1impl=+(l1.spxN+d*R1).toFixed(4);
+                  rows.push({lbl:`L0 lifts ${l0.offerN}`,leg:"L1",val:l1impl,side:"bid"});
+                  imp[`${l1.exp}|${l1.ten}`]={...(imp[`${l1.exp}|${l1.ten}`]||{}), bid:l1impl};
+                }
+                if(l1.bidN!=null){
+                  const d=l1.bidN-l1.spxN;
+                  const l0impl=+(l0.spxN+d/R1).toFixed(4);
+                  rows.push({lbl:`L1 bids ${l1.bidN}`,leg:"L0",val:l0impl,side:"offer"});
+                  imp[`${l0.exp}|${l0.ten}`]={...(imp[`${l0.exp}|${l0.ten}`]||{}), offer:l0impl};
+                }
+                if(l1.offerN!=null){
+                  const d=l1.offerN-l1.spxN;
+                  const l0impl=+(l0.spxN+d/R1).toFixed(4);
+                  rows.push({lbl:`L1 lifts ${l1.offerN}`,leg:"L0",val:l0impl,side:"bid"});
+                  imp[`${l0.exp}|${l0.ten}`]={...(imp[`${l0.exp}|${l0.ten}`]||{}), bid:l0impl};
+                }
+                setSpreadImplied(imp);
+                setSpreadResult({type:"2",rows,l0,l1,R1});
+              }
+            };
+            return (
+              <div style={{borderTop:"2px solid #2a1a4a",padding:"6px 10px 8px",background:"rgba(20,5,35,.4)"}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+                  <span style={{color:"#a070d0",fontSize:9,fontWeight:700,letterSpacing:".1em"}}>LEGGED SPREAD</span>
+                  <div style={{display:"flex",gap:3}}>
+                    {spreadResult&&<button onClick={()=>{setSpreadResult(null);setSpreadImplied({});}} style={{...iS,color:"#a04040",borderColor:"#3a1a1a"}}>CLR</button>}
+                    {spreadLegs.length<3&&<button onClick={()=>setSpreadLegs(p=>[...p,{exp:"1y",ten:"1Y",spreadPx:"",ratio:"",mktBid:"",mktOffer:""}])} style={{...iS,color:"#5a96c8"}}>+</button>}
+                  </div>
+                </div>
+                <input value={spreadName} onChange={e=>setSpreadName(e.target.value)}
+                  placeholder="e.g. 1y1y v 1y10y 8:1"
+                  style={{...iS,width:"100%",marginBottom:5,color:"#80b8d8"}}/>
+                {/* Headers */}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 38px 34px 34px 24px",gap:2,marginBottom:2}}>
+                  {["EXP","TEN","SPX","BID","OFR","R"].map(h=><span key={h} style={{color:"#6a3090",fontSize:7,fontWeight:700}}>{h}</span>)}
                 </div>
                 {spreadLegs.map((l,i)=>(
-                  <div key={i} style={{display:"grid",gridTemplateColumns:"20px 1fr 1fr 28px 28px 22px",gap:2,marginBottom:3,alignItems:"center"}}>
-                    <span style={{color:"#4a7898",fontSize:8,fontWeight:700}}>L{i+1}</span>
+                  <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 1fr 38px 34px 34px 24px",gap:2,marginBottom:3,alignItems:"center"}}>
                     <select value={l.exp} onChange={e=>upd(i,"exp",e.target.value)} style={{...iS}}>
                       {ALL_EXP.map(e=><option key={e}>{e.toUpperCase()}</option>)}
                     </select>
                     <select value={l.ten} onChange={e=>upd(i,"ten",e.target.value)} style={{...iS}}>
                       {ALL_TEN.map(t=><option key={t}>{t}</option>)}
                     </select>
-                    <input value={l.bid} onChange={e=>upd(i,"bid",e.target.value)} placeholder="bid" style={{...iS,color:"#00c040",fontWeight:700,textAlign:"center",width:"100%"}} onKeyDown={e=>e.key==="Enter"&&solveSpread()}/>
-                    <input value={l.offer} onChange={e=>upd(i,"offer",e.target.value)} placeholder="ofr" style={{...iS,color:"#ff8c00",fontWeight:700,textAlign:"center",width:"100%"}} onKeyDown={e=>e.key==="Enter"&&solveSpread()}/>
-                    <input value={l.ratio} onChange={e=>upd(i,"ratio",e.target.value)} placeholder={i===0?"1":"R"} style={{...iS,color:"#a070d0",fontWeight:700,textAlign:"center",width:"100%"}} onKeyDown={e=>e.key==="Enter"&&solveSpread()}/>
+                    <input value={l.spreadPx} onChange={e=>upd(i,"spreadPx",e.target.value)} placeholder="spx" style={{...iS,color:"#c080f0",fontWeight:700,textAlign:"center",width:"100%"}} onKeyDown={e=>e.key==="Enter"&&solve()}/>
+                    <input value={l.mktBid} onChange={e=>upd(i,"mktBid",e.target.value)} placeholder="bid" style={{...iS,color:"#00c040",fontWeight:700,textAlign:"center",width:"100%"}} onKeyDown={e=>e.key==="Enter"&&solve()}/>
+                    <input value={l.mktOffer} onChange={e=>upd(i,"mktOffer",e.target.value)} placeholder="ofr" style={{...iS,color:"#ff8c00",fontWeight:700,textAlign:"center",width:"100%"}} onKeyDown={e=>e.key==="Enter"&&solve()}/>
+                    <input value={l.ratio} onChange={e=>upd(i,"ratio",e.target.value)} placeholder={i===0?"1":"R"} style={{...iS,color:"#a070d0",fontWeight:700,textAlign:"center",width:"100%"}} onKeyDown={e=>e.key==="Enter"&&solve()}/>
                   </div>
                 ))}
-                <button onClick={solveSpread} style={{width:"100%",background:"rgba(20,50,100,.5)",border:"1px solid #2e4e78",color:"#5a96c8",borderRadius:2,padding:"3px 0",fontSize:8,fontFamily:"inherit",cursor:"pointer",marginBottom:4}}>SOLVE</button>
+                <button onClick={solve} style={{width:"100%",background:"rgba(60,10,100,.5)",border:"1px solid #5a20a0",color:"#c080f0",borderRadius:2,padding:"3px 0",fontSize:8,fontFamily:"inherit",cursor:"pointer",marginBottom:4}}>SOLVE</button>
                 {spreadResult?.err&&<div style={{color:"#a04040",fontSize:8,textAlign:"center"}}>{spreadResult.err}</div>}
                 {spreadResult?.type==="2"&&(
                   <div style={{background:"rgba(40,10,60,.3)",border:"1px solid #3a1a5a",borderRadius:2,padding:"5px 7px"}}>
-                    <div style={{color:"#7a40a0",fontSize:7,marginBottom:4}}>{spreadResult.l0.exp.toUpperCase()}×{spreadResult.l0.ten} v {spreadResult.l1.exp.toUpperCase()}×{spreadResult.l1.ten} · {spreadResult.l1.ratioN}:{spreadResult.l0.ratioN} · mid {spreadResult.spreadMid}bp</div>
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:3}}>
-                      {[
-                        {lbl:`L1 bids ${spreadResult.l0.bidN}`,val:spreadResult.l2bL1,c:"#ff8c00",leg:"L2 offer"},
-                        {lbl:`L1 lifts ${spreadResult.l0.offerN}`,val:spreadResult.l2lL1,c:"#00c040",leg:"L2 bid"},
-                        {lbl:`L2 bids ${spreadResult.l1.bidN}`,val:spreadResult.l1bL2,c:"#ff8c00",leg:"L1 offer"},
-                        {lbl:`L2 lifts ${spreadResult.l1.offerN}`,val:spreadResult.l1lL2,c:"#00c040",leg:"L1 bid"},
-                      ].map(({lbl,val,c,leg})=>(
-                        <div key={lbl}>
-                          <div style={{color:"#3a6080",fontSize:7}}>{lbl}</div>
-                          <span style={{color:c,fontWeight:700,fontSize:11}}>{val}</span>
-                          <span style={{color:"#6a3090",fontSize:7,marginLeft:2}}>{leg}</span>
-                        </div>
-                      ))}
+                    <div style={{color:"#7a40a0",fontSize:7,marginBottom:4}}>
+                      {spreadResult.l0.exp.toUpperCase()}×{spreadResult.l0.ten} spx {spreadResult.l0.spxN} · {spreadResult.l1.exp.toUpperCase()}×{spreadResult.l1.ten} spx {spreadResult.l1.spxN} · ratio {spreadResult.l1.ratioN}:{spreadResult.l0.ratioN}
                     </div>
-                    <div style={{marginTop:3,color:"#3a1a5a",fontSize:7}}>1bp L1={spreadResult.R.toFixed(2)}bp L2</div>
+                    {spreadResult.rows.map((r,i)=>(
+                      <div key={i} style={{display:"flex",alignItems:"baseline",gap:5,marginBottom:3}}>
+                        <span style={{color:"#5a3080",fontSize:7,width:80}}>{r.lbl}</span>
+                        <span style={{color:"#a070d0",fontSize:7}}>→ {r.leg}</span>
+                        <span style={{color:r.side==="bid"?"#00c040":"#ff8c00",fontWeight:700,fontSize:12}}>{r.val}</span>
+                        <span style={{color:"#6a3090",fontSize:7}}>{r.side}</span>
+                      </div>
+                    ))}
+                    <div style={{color:"#3a1a5a",fontSize:7,marginTop:2}}>1bp L0 = {spreadResult.R1.toFixed(2)}bp L1 · purple on grid</div>
                   </div>
                 )}
-                {spreadResult?.type==="3"&&(
-                  <div style={{background:"rgba(40,10,60,.3)",border:"1px solid #3a1a5a",borderRadius:2,padding:"5px 7px"}}>
-                    <div style={{color:"#7a40a0",fontSize:7,marginBottom:2}}>BUTTERFLY MID</div>
-                    <span style={{color:"#c080f0",fontWeight:700,fontSize:14}}>{spreadResult.flyMid}</span>
-                    <span style={{color:"#6a3090",fontSize:8,marginLeft:4}}>bp</span>
-                  </div>
-                )}
-              </>);
-            })()}
-          </div>
+              </div>
+            );
+          })()}
 
           <div style={{padding:"7px 14px",borderTop:"1px solid #1e3450",fontSize:8,color:"#243c54",letterSpacing:".07em",flexShrink:0}}>
             OTM · INDICATIVE ONLY
