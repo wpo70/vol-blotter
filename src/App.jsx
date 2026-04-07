@@ -3664,12 +3664,7 @@ export default function App() {
                 crossMsgs.forEach(m=>addToast(m,"cross"));
             };
 
-            // Auto-solve when quotes change (if spread is configured and previously solved)
-            const _prevSolved = React.useRef(false);
-            React.useEffect(()=>{
-              if(!_prevSolved.current) return; // only auto-update if user has already hit SOLVE
-              if(spreadLegs.every(l=>l.spreadPx!==''&&l.ratio!=='')) doSolve(spreadLegs,spreadName);
-            },[quotes]);
+            // Auto-solve handled at App level
 
             const reloadSpread=(h)=>{setSpreadName(h.name);setSpreadLegs(h.legs);setSpreadResult({...h});setSpreadImplied({});};
 
@@ -3678,7 +3673,7 @@ export default function App() {
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
                   <span style={{color:"#a070d0",fontSize:9,fontWeight:700,letterSpacing:".1em"}}>LEGGED SPREAD</span>
                   <div style={{display:"flex",gap:3}}>
-                    {spreadResult&&<button onClick={()=>{setSpreadResult(null);setSpreadImplied({});_prevSolved.current=false;}} style={{...iS,color:"#a04040",borderColor:"#3a1a1a",padding:"1px 5px"}}>CLR</button>}
+                    {spreadResult&&<button onClick={()=>{setSpreadResult(null);setSpreadImplied({});}} style={{...iS,color:"#a04040",borderColor:"#3a1a1a",padding:"1px 5px"}}>CLR</button>}
                     {spreadLegs.length<3&&<button onClick={()=>setSpreadLegs(p=>[...p,{exp:"1y",ten:"1Y",spreadPx:"",ratio:"1"}])} style={{...iS,color:"#5a96c8",padding:"1px 5px"}}>+LEG</button>}
                   </div>
                 </div>
@@ -3721,7 +3716,7 @@ export default function App() {
                   );
                 })}
 
-                <button onClick={()=>{_prevSolved.current=true;doSolve(spreadLegs,spreadName);}} style={{width:"100%",background:"rgba(60,10,100,.6)",border:"1px solid #7a30c0",color:"#d090f0",borderRadius:2,padding:"4px 0",fontSize:9,fontFamily:"inherit",cursor:"pointer",letterSpacing:".08em",marginBottom:5}}>SOLVE</button>
+                <button onClick={()=>doSolve(spreadLegs,spreadName)} style={{width:"100%",background:"rgba(60,10,100,.6)",border:"1px solid #7a30c0",color:"#d090f0",borderRadius:2,padding:"4px 0",fontSize:9,fontFamily:"inherit",cursor:"pointer",letterSpacing:".08em",marginBottom:5}}>SOLVE</button>
 
                 {spreadResult?.type==="2"&&spreadResult.rows.length>0&&(
                   <div style={{background:"rgba(40,10,60,.4)",border:"1px solid #4a20a0",borderRadius:3,padding:"6px 8px",marginBottom:5}}>
