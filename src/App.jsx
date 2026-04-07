@@ -673,7 +673,7 @@ function FwdCfsCell({ quotes, referred, onRefer, onDel, onClick, active, prevQuo
 }
 
 // ── Wedge Panel ──────────────────────────────────────────────
-function WedgePanel({ ccy, wedgeQuotes, wedgeRef, wedgeLog=[], setWedgeLog, wedgeActive, setWedgeActive, wedgeFwdImp, setWedgeFwdImp, addWedgeQuote, reloadWedgeQuote, toggleWedgeRef, delWedgeQ, swpQuotes={}, swpReferred, cfQuotes={}, cfRef={}, cfBkCol, liveWedgeMids={}, livePremMatrix=null }) {
+function WedgePanel({ spreadImplied={}, ccy, wedgeQuotes, wedgeRef, wedgeLog=[], setWedgeLog, wedgeActive, setWedgeActive, wedgeFwdImp, setWedgeFwdImp, addWedgeQuote, reloadWedgeQuote, toggleWedgeRef, delWedgeQ, swpQuotes={}, swpReferred, cfQuotes={}, cfRef={}, cfBkCol, liveWedgeMids={}, livePremMatrix=null }) {
   const TENORS_IDX = {"1Y":0,"2Y":1,"3Y":2,"4Y":3,"5Y":4,"7Y":5,"10Y":6,"12Y":7,"15Y":8,"20Y":9};
   const prem = (ccy==="AUD" && livePremMatrix) ? livePremMatrix : (ccy==="AUD" ? AUD_PREM : null);
   const swpMid = (exp,ten) => {
@@ -687,7 +687,7 @@ function WedgePanel({ ccy, wedgeQuotes, wedgeRef, wedgeLog=[], setWedgeLog, wedg
     const cell = swpQuotes[k]; if(!cell) return {bid:null,offer:null,bidBank:null,offerBank:null};
     const actB = cell.bids.filter(q=>!swpReferred?.has(`${k}|bids|${q.id}`));
     const actO = cell.offers.filter(q=>!swpReferred?.has(`${k}|offers|${q.id}`));
-    return { bid:actB[0]?.price??null, bidBank:actB[0]?.bank??null, offer:actO[0]?.price??null, offerBank:actO[0]?.bank??null };
+    const rawBid=actB[0]?.price??null;const rawOffer=actO[0]?.price??null;const spr=spreadImplied[`${exp}|${ten}`];const bid=(spr?.bid!=null&&(rawBid==null||spr.bid>rawBid))?spr.bid:rawBid;const offer=(spr?.offer!=null&&(rawOffer==null||spr.offer<rawOffer))?spr.offer:rawOffer;return { bid, bidBank:actB[0]?.bank??null, offer:actO[0]?.price??null, offerBank:actO[0]?.bank??null };
   };
   // Get published wedge mid for a row (from Supabase blotter_mids via liveWedgeMids)
   // Map WEDGE_ROW id -> blotter_mids key (pricer publishes as wedge_cf_spr_XXXX)
@@ -1518,6 +1518,7 @@ function CapFloorPanel({ spreadImplied={}, ccy, subMenu, hiddenSt, setHiddenSt, 
       {/* ── WEDGE (persistent) ── */}
       <div style={{display:subMenu==="wedge"?"flex":"none",flex:1,flexDirection:"column",overflow:"hidden",minHeight:0}}>
         <WedgePanel
+          spreadImplied={spreadImplied}
           ccy={ccy}
           wedgeQuotes={wedgeQuotes} wedgeRef={wedgeRef} wedgeLog={wedgeLog} setWedgeLog={setWedgeLog}
           wedgeActive={wedgeActive} setWedgeActive={setWedgeActive}
@@ -3618,7 +3619,16 @@ export default function App() {
               if(l0.liveOffer!=null){const v=+(l1.spxN+(l0.liveOffer-l0.spxN)*R).toFixed(4);rows.push({lbl:`L0 lifts ${l0.liveOffer}`,legLbl:`→${l1.exp.toUpperCase()}×${l1.ten}`,val:v,side:"offer"});addImp(l1.exp,l1.ten,"offer",v);}
               if(l1.liveBid!=null){const v=+(l0.spxN+(l1.liveBid-l1.spxN)/R).toFixed(4);rows.push({lbl:`L1 bids ${l1.liveBid}`,legLbl:`→${l0.exp.toUpperCase()}×${l0.ten}`,val:v,side:"bid"});addImp(l0.exp,l0.ten,"bid",v);}
               if(l1.liveOffer!=null){const v=+(l0.spxN+(l1.liveOffer-l1.spxN)/R).toFixed(4);rows.push({lbl:`L1 lifts ${l1.liveOffer}`,legLbl:`→${l0.exp.toUpperCase()}×${l0.ten}`,val:v,side:"offer"});addImp(l0.exp,l0.ten,"offer",v);}
-              setSpreadImplied(imp);
+              // Merge new implied prices - keep best price across all active spreads
+              setSpreadImplied(prev=>{
+                const merged={...prev};
+                Object.entries(imp).forEach(([k,v])=>{
+                  if(!merged[k]) merged[k]={};
+                  if(v.bid!=null&&(merged[k].bid==null||v.bid>merged[k].bid)) merged[k].bid=v.bid;
+                  if(v.offer!=null&&(merged[k].offer==null||v.offer<merged[k].offer)) merged[k].offer=v.offer;
+                });
+                return merged;
+              });
               const label=name||`${l0.ratioN}:${l1.ratioN} ${l0.exp.toUpperCase()}×${l0.ten} v ${l1.exp.toUpperCase()}×${l1.ten}`;
               const res={type:"2",rows,l0,l1,R,name:label,ts:new Date().toISOString(),legs:JSON.parse(JSON.stringify(legs))};
               setSpreadResult(res);
@@ -3651,7 +3661,7 @@ export default function App() {
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
                   <span style={{color:"#a070d0",fontSize:9,fontWeight:700,letterSpacing:".1em"}}>LEGGED SPREAD</span>
                   <div style={{display:"flex",gap:3}}>
-                    {spreadResult&&<button onClick={()=>{setSpreadResult(null);setSpreadImplied({});}} style={{...iS,color:"#a04040",borderColor:"#3a1a1a",padding:"1px 5px"}}>CLR</button>}
+                    {spreadResult&&<button onClick={()=>{setSpreadResult(null);setSpreadImplied({});_prevSolved.current=false;}} style={{...iS,color:"#a04040",borderColor:"#3a1a1a",padding:"1px 5px"}}>CLR</button>}
                     {spreadLegs.length<3&&<button onClick={()=>setSpreadLegs(p=>[...p,{exp:"1y",ten:"1Y",spreadPx:"",ratio:"1"}])} style={{...iS,color:"#5a96c8",padding:"1px 5px"}}>+LEG</button>}
                   </div>
                 </div>
