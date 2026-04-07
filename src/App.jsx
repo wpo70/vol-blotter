@@ -1063,7 +1063,7 @@ function WedgeLogPanel({ wedgeQuotes, wedgeRef, wedgeLog=[], setWedgeLog, reload
   );
 }
 
-function CapFloorPanel({ ccy, subMenu, hiddenSt, setHiddenSt, cfLiveRef, cfEodRef, swpQuotes={}, swpReferred, liveStrikeMap=null, liveWedgeMids=null, livePremMatrix=null, copiedCfLive=false, setCopiedCfLive=()=>{}, copiedCfEOD=false, setCopiedCfEOD=()=>{} }) {
+function CapFloorPanel({ spreadImplied={}, ccy, subMenu, hiddenSt, setHiddenSt, cfLiveRef, cfEodRef, swpQuotes={}, swpReferred, liveStrikeMap=null, liveWedgeMids=null, livePremMatrix=null, copiedCfLive=false, setCopiedCfLive=()=>{}, copiedCfEOD=false, setCopiedCfEOD=()=>{} }) {
   const initQ = () => ({});  // all cells start empty; straddle ref comes from AUD_DUMMY_QUOTES
   const [cfQuotes,  setCfQuotes]  = React.useState(()=>{
     try{ const s=localStorage.getItem("vbl_cfQuotes"); return s?JSON.parse(s):initQ(); }catch{return initQ();}
@@ -3236,7 +3236,7 @@ export default function App() {
       )}
 
       <div style={{display:activeProduct==="capfloor"?"flex":"none",flex:1,overflow:"hidden",flexDirection:"column",minHeight:0}}>
-        <CapFloorPanel ccy={activeCfCcy} subMenu={cfSubMenu} hiddenSt={cfHiddenSt} setHiddenSt={setCfHiddenSt} cfLiveRef={cfLiveRef} cfEodRef={cfEodRef} swpQuotes={quotes} swpReferred={referred} liveStrikeMap={activeCfCcy==="AUD"?liveStrikeMap:null} liveWedgeMids={activeCfCcy==="AUD"?liveWedgeMids:null} livePremMatrix={activeCfCcy==="AUD"?livePremMatrix:null} copiedCfLive={copiedCfLive} setCopiedCfLive={setCopiedCfLive} copiedCfEOD={copiedCfEOD} setCopiedCfEOD={setCopiedCfEOD}/>
+        <CapFloorPanel spreadImplied={spreadImplied} ccy={activeCfCcy} subMenu={cfSubMenu} hiddenSt={cfHiddenSt} setHiddenSt={setCfHiddenSt} cfLiveRef={cfLiveRef} cfEodRef={cfEodRef} swpQuotes={quotes} swpReferred={referred} liveStrikeMap={activeCfCcy==="AUD"?liveStrikeMap:null} liveWedgeMids={activeCfCcy==="AUD"?liveWedgeMids:null} livePremMatrix={activeCfCcy==="AUD"?livePremMatrix:null} copiedCfLive={copiedCfLive} setCopiedCfLive={setCopiedCfLive} copiedCfEOD={copiedCfEOD} setCopiedCfEOD={setCopiedCfEOD}/>
       </div>
       <div style={{display:activeProduct==="swaption"?"flex":"none",flex:1,overflow:"hidden"}}>
         {/* GRID */}
