@@ -3623,21 +3623,24 @@ export default function App() {
               const res={type:"2",rows,l0,l1,R,name:label,ts:new Date().toISOString(),legs:JSON.parse(JSON.stringify(legs))};
               setSpreadResult(res);
               if(rows.length>0) setSpreadLog(prev=>{const next=[{id:Date.now(),...res},...prev.filter(h=>h.name!==label)].slice(0,20);return next;});
-                // Cross detection on swaption grid
+                // Cross detection - only fire once per solve, not on every quote change
+                const crossMsgs=[];
                 Object.entries(imp).forEach(([k,v])=>{
                   const [iexp,iten]=k.split("|");
                   const cell=quotes[cellKey(iexp,iten)];
                   if(!cell) return;
                   const bestBid  =(cell.bids||[]).filter(q=>!isReferred(k,"bids",q.id)).sort((a,b)=>b.price-a.price)[0]?.price??null;
                   const bestOffer=(cell.offers||[]).filter(q=>!isReferred(k,"offers",q.id)).sort((a,b)=>a.price-b.price)[0]?.price??null;
-                  const impBid=v.bid; const impOff=v.offer;
-                  if(impBid!=null&&bestOffer!=null&&impBid>=bestOffer) addToast(`🔔 CROSS: ${iexp.toUpperCase()}×${iten} — legged bid ${impBid} vs offer ${bestOffer}`,"cross");
-                  if(impOff!=null&&bestBid!=null&&impOff<=bestBid)    addToast(`🔔 CROSS: ${iexp.toUpperCase()}×${iten} — legged offer ${impOff} vs bid ${bestBid}`,"cross");
+                  if(v.bid!=null&&bestOffer!=null&&v.bid>=bestOffer) crossMsgs.push(`🔔 CROSS: ${iexp.toUpperCase()}×${iten} — legged bid ${v.bid} ≥ offer ${bestOffer}`);
+                  if(v.offer!=null&&bestBid!=null&&v.offer<=bestBid) crossMsgs.push(`🔔 CROSS: ${iexp.toUpperCase()}×${iten} — legged offer ${v.offer} ≤ bid ${bestBid}`);
                 });
+                crossMsgs.forEach(m=>addToast(m,"cross"));
             };
 
-            // Auto-solve when quotes change (if spread is configured)
+            // Auto-solve when quotes change (if spread is configured and previously solved)
+            const _prevSolved = React.useRef(false);
             React.useEffect(()=>{
+              if(!_prevSolved.current) return; // only auto-update if user has already hit SOLVE
               if(spreadLegs.every(l=>l.spreadPx!==''&&l.ratio!=='')) doSolve(spreadLegs,spreadName);
             },[quotes]);
 
@@ -3691,7 +3694,7 @@ export default function App() {
                   );
                 })}
 
-                <button onClick={()=>doSolve(spreadLegs,spreadName)} style={{width:"100%",background:"rgba(60,10,100,.6)",border:"1px solid #7a30c0",color:"#d090f0",borderRadius:2,padding:"4px 0",fontSize:9,fontFamily:"inherit",cursor:"pointer",letterSpacing:".08em",marginBottom:5}}>SOLVE</button>
+                <button onClick={()=>{_prevSolved.current=true;doSolve(spreadLegs,spreadName);}} style={{width:"100%",background:"rgba(60,10,100,.6)",border:"1px solid #7a30c0",color:"#d090f0",borderRadius:2,padding:"4px 0",fontSize:9,fontFamily:"inherit",cursor:"pointer",letterSpacing:".08em",marginBottom:5}}>SOLVE</button>
 
                 {spreadResult?.type==="2"&&spreadResult.rows.length>0&&(
                   <div style={{background:"rgba(40,10,60,.4)",border:"1px solid #4a20a0",borderRadius:3,padding:"6px 8px",marginBottom:5}}>
