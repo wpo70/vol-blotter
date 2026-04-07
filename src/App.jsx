@@ -3538,7 +3538,7 @@ export default function App() {
           </div>}
 
           {/* LIST */}
-          <div style={{flex:1,overflow:"auto"}}>
+          <div style={{flex:"0 1 auto",maxHeight:200,overflow:"auto"}}>
             {displayOtm.length===0
               ? <div style={{padding:"24px 14px",color:"#1e3048",fontSize:10,textAlign:"center"}}>{otmQuotes.length>0?"No matches":"No structures yet"}</div>
               : displayOtm.map(q=>(
