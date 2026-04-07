@@ -3339,6 +3339,21 @@ export default function App() {
                               {dispMid ?? "--"}
                             </div>
 
+                            (()=>{
+                              const spr=spreadImplied[`${exp}|${ten}`];
+                              if(!spr) return null;
+                              const ob=bids.slice().sort((a,b)=>b.price-a.price)[0]?.price??null;
+                              const oo=offers.slice().sort((a,b)=>a.price-b.price)[0]?.price??null;
+                              const bidImprove = spr.bid!=null&&(ob==null||spr.bid>ob) ? spr.bid-(ob??spr.bid-1) : -Infinity;
+                              const offImprove = spr.offer!=null&&(oo==null||spr.offer<oo) ? (oo??spr.offer+1)-spr.offer : -Infinity;
+                              const showBid = bidImprove>-Infinity && bidImprove>=offImprove;
+                              const showOff = offImprove>-Infinity && offImprove>bidImprove;
+                              if(!showBid&&!showOff) return null;
+                              return(
+                              <div style={{textAlign:"center",marginBottom:1}}>
+                                {showBid&&<div style={{color:"#c080f0",fontWeight:700,fontSize:11}}>{spr.bid.toFixed(4)}<span style={{color:"#5a2090",fontSize:7,marginLeft:2}}>leg</span></div>}
+                                {showOff&&<div style={{color:"#9050d0",fontWeight:700,fontSize:11}}>{spr.offer.toFixed(4)}<span style={{color:"#5a2090",fontSize:7,marginLeft:2}}>leg</span></div>}
+                              </div>);})()}
                             {/* BIDS — best only, full depth on hover */}
                             {(isHov ? bids : bids.slice(0,1)).map((q,i)=>{
                               const ref = isReferred(k,"bids",q.id);
@@ -3385,25 +3400,7 @@ export default function App() {
                               );
                             })}
 
-                            {(()=>{
-                              const spr=spreadImplied[`${exp}|${ten}`];
-                              if(!spr) return null;
-                              // Only show the single best improving side
-                              // bid improvement = spr.bid - best outright bid (higher = better)
-                              // offer improvement = best outright offer - spr.offer (lower = better)
-                              const cell2=quotes[cellKey(exp,ten)];
-                              const ob=(cell2?.bids||[]).filter(q=>!isReferred(cellKey(exp,ten),"bids",q.id)).sort((a,b)=>b.price-a.price)[0]?.price??null;
-                              const oo=(cell2?.offers||[]).filter(q=>!isReferred(cellKey(exp,ten),"offers",q.id)).sort((a,b)=>a.price-b.price)[0]?.price??null;
-                              const bidImprove = spr.bid!=null ? spr.bid-(ob??spr.bid-1) : -Infinity;
-                              const offImprove = spr.offer!=null ? (oo??spr.offer+1)-spr.offer : -Infinity;
-                              const showBid = spr.bid!=null && bidImprove>=0 && bidImprove>=offImprove;
-                              const showOff = spr.offer!=null && offImprove>=0 && offImprove>bidImprove;
-                              if(!showBid&&!showOff) return null;
-                              return(
-                              <div style={{borderTop:"1px solid #2a1a4a",marginTop:2,paddingTop:2,textAlign:"center"}}>
-                                {showBid&&<div style={{color:"#c080f0",fontWeight:700,fontSize:10}}>{spr.bid.toFixed(4)}<span style={{color:"#6a3090",fontSize:7,marginLeft:2}}>leg</span></div>}
-                                {showOff&&<div style={{color:"#9050d0",fontWeight:700,fontSize:10}}>{spr.offer.toFixed(4)}<span style={{color:"#6a3090",fontSize:7,marginLeft:2}}>leg</span></div>}
-                              </div>);})()}
+                            {
                             {isHov && (hasBid||hasOff) && (
                               <div style={{textAlign:"center",marginTop:1}}>
                                 <span onClick={e=>clearCell(k,e)} style={{color:"#4a2020",fontSize:7,cursor:"pointer"}}>CLEAR ALL</span>
@@ -3617,10 +3614,10 @@ export default function App() {
                 if(side==="bid"&&(live.bid==null||val>live.bid)){if(!imp[k])imp[k]={};imp[k].bid=val;}
                 if(side==="offer"&&(live.offer==null||val<live.offer)){if(!imp[k])imp[k]={};imp[k].offer=val;}
               };
-              if(l0.liveBid!=null){const v=+(l1.spxN+(l0.liveBid-l0.spxN)*R).toFixed(4);rows.push({lbl:`L0 bids ${l0.liveBid}`,legLbl:`→${l1.exp.toUpperCase()}×${l1.ten}`,val:v,side:"offer"});addImp(l1.exp,l1.ten,"offer",v);}
-              if(l0.liveOffer!=null){const v=+(l1.spxN+(l0.liveOffer-l0.spxN)*R).toFixed(4);rows.push({lbl:`L0 lifts ${l0.liveOffer}`,legLbl:`→${l1.exp.toUpperCase()}×${l1.ten}`,val:v,side:"bid"});addImp(l1.exp,l1.ten,"bid",v);}
-              if(l1.liveBid!=null){const v=+(l0.spxN+(l1.liveBid-l1.spxN)/R).toFixed(4);rows.push({lbl:`L1 bids ${l1.liveBid}`,legLbl:`→${l0.exp.toUpperCase()}×${l0.ten}`,val:v,side:"offer"});addImp(l0.exp,l0.ten,"offer",v);}
-              if(l1.liveOffer!=null){const v=+(l0.spxN+(l1.liveOffer-l1.spxN)/R).toFixed(4);rows.push({lbl:`L1 lifts ${l1.liveOffer}`,legLbl:`→${l0.exp.toUpperCase()}×${l0.ten}`,val:v,side:"bid"});addImp(l0.exp,l0.ten,"bid",v);}
+              if(l0.liveBid!=null){const v=+(l1.spxN+(l0.liveBid-l0.spxN)*R).toFixed(4);rows.push({lbl:`L0 bids ${l0.liveBid}`,legLbl:`→${l1.exp.toUpperCase()}×${l1.ten}`,val:v,side:"bid"});addImp(l1.exp,l1.ten,"bid",v);}
+              if(l0.liveOffer!=null){const v=+(l1.spxN+(l0.liveOffer-l0.spxN)*R).toFixed(4);rows.push({lbl:`L0 lifts ${l0.liveOffer}`,legLbl:`→${l1.exp.toUpperCase()}×${l1.ten}`,val:v,side:"offer"});addImp(l1.exp,l1.ten,"offer",v);}
+              if(l1.liveBid!=null){const v=+(l0.spxN+(l1.liveBid-l1.spxN)/R).toFixed(4);rows.push({lbl:`L1 bids ${l1.liveBid}`,legLbl:`→${l0.exp.toUpperCase()}×${l0.ten}`,val:v,side:"bid"});addImp(l0.exp,l0.ten,"bid",v);}
+              if(l1.liveOffer!=null){const v=+(l0.spxN+(l1.liveOffer-l1.spxN)/R).toFixed(4);rows.push({lbl:`L1 lifts ${l1.liveOffer}`,legLbl:`→${l0.exp.toUpperCase()}×${l0.ten}`,val:v,side:"offer"});addImp(l0.exp,l0.ten,"offer",v);}
               setSpreadImplied(imp);
               const label=name||`${l0.ratioN}:${l1.ratioN} ${l0.exp.toUpperCase()}×${l0.ten} v ${l1.exp.toUpperCase()}×${l1.ten}`;
               const res={type:"2",rows,l0,l1,R,name:label,ts:new Date().toISOString(),legs:JSON.parse(JSON.stringify(legs))};
