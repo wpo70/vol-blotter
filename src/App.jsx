@@ -2470,6 +2470,7 @@ export default function App() {
   const [filterMins, setFilterMins]       = useState(null);
   const [sortDir,    setSortDir]          = useState("desc");
   const [spreadName,   setSpreadName]   = useState("");
+  const [spreadTwoWay, setSpreadTwoWay] = useState(false);
   const [spreadLegs,   setSpreadLegs]   = useState([
     {exp:"1y", ten:"1Y",  spreadPx:"", ratio:"8", bank:"", side:"bid"},
     {exp:"1y", ten:"10Y", spreadPx:"", ratio:"1", bank:"", side:"offer"}
@@ -3359,7 +3360,7 @@ export default function App() {
                               // Show implied BID (better than outright)
                               if(!spr.bid) return null;
                               const ob=bids.filter(q=>!isReferred(cellKey(exp,ten),"bids",q.id)).sort((a,b)=>b.price-a.price)[0]?.price??null;
-                              if(ob!=null&&spr.bid<=ob) return null;
+                              if(ob!=null&&spr.bid<ob) return null; // show if tied or better
                               return <div style={{color:"#c080f0",fontWeight:700,fontSize:11,textAlign:"center"}}>{spr.bid.toFixed(4)}{spr.bank&&<span style={{color:bkc(spr.bank),fontSize:7,marginLeft:2,fontWeight:700}}>{spr.bank}</span>}</div>;
                             })()}
                             {/* BIDS — best only, full depth on hover */}
@@ -3419,7 +3420,7 @@ export default function App() {
                                 </div>);
                               if(!spr2.offer) return null;
                               const oo=offers.filter(q=>!isReferred(cellKey(exp,ten),"offers",q.id)).sort((a,b)=>a.price-b.price)[0]?.price??null;
-                              if(oo!=null&&spr2.offer>=oo) return null;
+                              if(oo!=null&&spr2.offer>oo) return null; // show if tied or better
                               return <div style={{color:"#9050d0",fontWeight:700,fontSize:11,textAlign:"center"}}>{spr2.offer.toFixed(4)}{spr2.bank&&<span style={{color:bkc(spr2.bank),fontSize:7,marginLeft:2,fontWeight:700}}>{spr2.bank}</span>}</div>;
                             })()}
                             {isHov && (hasBid||hasOff) && (
@@ -3656,20 +3657,19 @@ export default function App() {
                 }
               };
               const bk=spreadLegs[0]?.bank||"";
-              // B = you buy L0: counterparty offers L0 at liveOffer → L1 implied OFFER
-              // O = you sell L0: counterparty bids L0 at liveBid → L1 implied BID
-              if((l0.side||"bid")==="bid"){
-                if(l0.liveOffer!=null){const v=+(l1.spxN+(l0.liveOffer-l0.spxN)*R).toFixed(4);rows.push({lbl:`${l0.exp.toUpperCase()}×${l0.ten} offer ${l0.liveOffer}`,val:v,side:"offer",bank:bk});addImp(l1.exp,l1.ten,"offer",v,bk,l0,"bid");}
-              } else {
-                if(l0.liveBid!=null){const v=+(l1.spxN+(l0.liveBid-l0.spxN)*R).toFixed(4);rows.push({lbl:`${l0.exp.toUpperCase()}×${l0.ten} bid ${l0.liveBid}`,val:v,side:"bid",bank:bk});addImp(l1.exp,l1.ten,"bid",v,bk,l0,"offer");}
-              }
-              if((l1.side||"offer")==="offer"){
-                // L1 O (you sell L1): counterparty bids L1 → L0 implied BID
-                if(l1.liveBid!=null){const v=+(l0.spxN+(l1.liveBid-l1.spxN)/R).toFixed(4);rows.push({lbl:`${l1.exp.toUpperCase()}×${l1.ten} bid ${l1.liveBid}`,val:v,side:"bid",bank:bk});addImp(l0.exp,l0.ten,"bid",v,bk,l1,"offer");}
-              } else {
-                // L1 B (you buy L1): counterparty offers L1 → L0 implied OFFER
-                if(l1.liveOffer!=null){const v=+(l0.spxN+(l1.liveOffer-l1.spxN)/R).toFixed(4);rows.push({lbl:`${l1.exp.toUpperCase()}×${l1.ten} offer ${l1.liveOffer}`,val:v,side:"offer",bank:bk});addImp(l0.exp,l0.ten,"offer",v,bk,l1,"bid");}
-              }
+              // B = you buy L0: counterparty offers L0 → L1 implied OFFER
+              // O = you sell L0: counterparty bids L0 → L1 implied BID
+              // 2-WAY: run both directions simultaneously
+              const l0IsBid=(l0.side||"bid")==="bid";
+              const runL0Bid=l0IsBid||spreadTwoWay;
+              const runL0Off=!l0IsBid||spreadTwoWay;
+              if(runL0Bid&&l0.liveOffer!=null){const v=+(l1.spxN+(l0.liveOffer-l0.spxN)*R).toFixed(4);rows.push({lbl:`${l0.exp.toUpperCase()}×${l0.ten} offer ${l0.liveOffer}`,val:v,side:"offer",bank:bk});addImp(l1.exp,l1.ten,"offer",v,bk,l0,"bid");}
+              if(runL0Off&&l0.liveBid!=null){const v=+(l1.spxN+(l0.liveBid-l0.spxN)*R).toFixed(4);rows.push({lbl:`${l0.exp.toUpperCase()}×${l0.ten} bid ${l0.liveBid}`,val:v,side:"bid",bank:bk});addImp(l1.exp,l1.ten,"bid",v,bk,l0,"offer");}
+              const l1IsOff=(l1.side||"offer")==="offer";
+              const runL1Off=l1IsOff||spreadTwoWay;
+              const runL1Bid=!l1IsOff||spreadTwoWay;
+              if(runL1Off&&l1.liveBid!=null){const v=+(l0.spxN+(l1.liveBid-l1.spxN)/R).toFixed(4);rows.push({lbl:`${l1.exp.toUpperCase()}×${l1.ten} bid ${l1.liveBid}`,val:v,side:"bid",bank:bk});addImp(l0.exp,l0.ten,"bid",v,bk,l1,"offer");}
+              if(runL1Bid&&l1.liveOffer!=null){const v=+(l0.spxN+(l1.liveOffer-l1.spxN)/R).toFixed(4);rows.push({lbl:`${l1.exp.toUpperCase()}×${l1.ten} offer ${l1.liveOffer}`,val:v,side:"offer",bank:bk});addImp(l0.exp,l0.ten,"offer",v,bk,l1,"bid");}
               if(l1.liveOffer!=null){const v=+(l0.spxN+(l1.liveOffer-l1.spxN)/R).toFixed(4);rows.push({lbl:`L1 lifts ${l1.liveOffer}`,legLbl:`→${l0.exp.toUpperCase()}×${l0.ten}`,val:v,side:"offer"});addImp(l0.exp,l0.ten,"offer",v);}
               // Merge new implied prices - keep best price across all active spreads
               setSpreadImplied(prev=>{
@@ -3717,7 +3717,9 @@ export default function App() {
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
                   <span style={{color:"#a070d0",fontSize:9,fontWeight:700,letterSpacing:".1em"}}>LEGGED SPREAD</span>
                   <div style={{display:"flex",gap:3}}>
-                    {spreadResult&&<button onClick={()=>{
+                    <button onClick={()=>setSpreadTwoWay(v=>!v)}
+                  style={{...iS,color:spreadTwoWay?"#c0c040":"#5a6080",borderColor:spreadTwoWay?"#808020":"#2a3860",padding:"1px 5px",fontWeight:700}}>2-WAY</button>
+                {spreadResult&&<button onClick={()=>{
                     setSpreadLog(prev=>{
                       const next=prev.filter(h=>h.name!==spreadResult?.name);
                       const merged={};
