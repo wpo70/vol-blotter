@@ -3812,11 +3812,23 @@ export default function App() {
                       // Build price summary from rows
                       const priceSummary=h.rows?.map(r=>`${r.val}${r.side==="bid"?"b":"o"}`).join(" / ")||"";
                       return (
-                      <div key={h.id} style={{background:"rgba(20,5,30,.6)",border:`1px solid ${borderCol}`,borderRadius:2,padding:"3px 6px",marginBottom:2,display:"flex",alignItems:"center",gap:5}}>
+                      <div key={h.id} style={{background:"rgba(20,5,30,.6)",border:`1px solid ${borderCol}`,borderRadius:2,padding:"4px 6px",marginBottom:2,display:"flex",alignItems:"center",gap:5}}>
                         <div style={{flex:1,overflow:"hidden",minWidth:0}}>
-                          <div style={{color:nameCol,fontSize:7,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{h.name}</div>
-                          <div style={{display:"flex",gap:6,alignItems:"baseline",marginTop:1}}>
-                            <span style={{color:"#5a96a0",fontSize:8,fontWeight:700,letterSpacing:".02em"}}>{priceSummary}</span>
+                          {/* Line 1: short name e.g. "1Y×1Y v 1Y×10Y" */}
+                          <div style={{color:nameCol,fontSize:7,fontWeight:700,marginBottom:1}}>
+                            {h.legs?h.legs.map((l,i)=>(
+                              <span key={i}>{i>0?" v ":""}{l.exp.toUpperCase()}×{l.ten}</span>
+                            )):h.name}
+                          </div>
+                          {/* Line 2: full detail e.g. "1Y×1Y 73.5 L v 1Y×10Y 525 O DB 8:1" */}
+                          <div style={{color:"#5a96a0",fontSize:7,marginBottom:1}}>
+                            {h.legs?h.legs.map((l,i)=>(
+                              <span key={i}>{i>0?" v ":""}{l.exp.toUpperCase()}×{l.ten} <span style={{color:"#c080f0",fontWeight:700}}>{l.spreadPx}</span> <span style={{color:l.side==="bid"?"#00c040":"#ff8c00"}}>{l.side==="bid"?"B":"O"}</span>{l.bank?<span style={{color:bkc(l.bank),fontWeight:700,marginLeft:2}}>{l.bank}</span>:""}</span>
+                            )):""} {h.legs?`${h.legs[0]?.ratio}:${h.legs[1]?.ratio}`:""}
+                          </div>
+                          {/* Line 3: implied prices + time */}
+                          <div style={{display:"flex",gap:4,alignItems:"baseline"}}>
+                            <span style={{color:"#3a6080",fontSize:6}}>{priceSummary}</span>
                             <span style={{color:"#2a1040",fontSize:6}}>{new Date(h.ts).toLocaleTimeString("en-GB",{hour12:false})}</span>
                           </div>
                         </div>
