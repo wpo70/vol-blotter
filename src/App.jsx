@@ -2471,8 +2471,8 @@ export default function App() {
   const [sortDir,    setSortDir]          = useState("desc");
   const [spreadName,   setSpreadName]   = useState("");
   const [spreadLegs,   setSpreadLegs]   = useState([
-    {exp:"1y", ten:"1Y",  spreadPx:"", ratio:"8", bank:"", side:"offer"},
-    {exp:"1y", ten:"10Y", spreadPx:"", ratio:"1", bank:"", side:"bid"}
+    {exp:"1y", ten:"1Y",  spreadPx:"", ratio:"8", bank:"", side:"bid"},
+    {exp:"1y", ten:"10Y", spreadPx:"", ratio:"1", bank:"", side:"offer"}
   ]);
   const [spreadImplied, setSpreadImplied] = useState({});
   const [spreadResult,  setSpreadResult]  = useState(null);
@@ -3656,15 +3656,19 @@ export default function App() {
                 }
               };
               const bk=spreadLegs[0]?.bank||"";
-              if((l0.side||"offer")==="offer"){
-                if(l0.liveOffer!=null){const v=+(l1.spxN+(l0.liveOffer-l0.spxN)*R).toFixed(4);rows.push({lbl:`${l0.exp.toUpperCase()}×${l0.ten} offer ${l0.liveOffer}`,val:v,side:"bid",bank:bk});addImp(l1.exp,l1.ten,"bid",v,bk,l0,"offer");}
+              // B = you buy L0: counterparty offers L0 at liveOffer → L1 implied OFFER
+              // O = you sell L0: counterparty bids L0 at liveBid → L1 implied BID
+              if((l0.side||"bid")==="bid"){
+                if(l0.liveOffer!=null){const v=+(l1.spxN+(l0.liveOffer-l0.spxN)*R).toFixed(4);rows.push({lbl:`${l0.exp.toUpperCase()}×${l0.ten} offer ${l0.liveOffer}`,val:v,side:"offer",bank:bk});addImp(l1.exp,l1.ten,"offer",v,bk,l0,"bid");}
               } else {
-                if(l0.liveBid!=null){const v=+(l1.spxN+(l0.liveBid-l0.spxN)*R).toFixed(4);rows.push({lbl:`${l0.exp.toUpperCase()}×${l0.ten} bid ${l0.liveBid}`,val:v,side:"offer",bank:bk});addImp(l1.exp,l1.ten,"offer",v,bk,l0,"bid");}
+                if(l0.liveBid!=null){const v=+(l1.spxN+(l0.liveBid-l0.spxN)*R).toFixed(4);rows.push({lbl:`${l0.exp.toUpperCase()}×${l0.ten} bid ${l0.liveBid}`,val:v,side:"bid",bank:bk});addImp(l1.exp,l1.ten,"bid",v,bk,l0,"offer");}
               }
-              if((l1.side||"bid")==="bid"){
-                if(l1.liveBid!=null){const v=+(l0.spxN+(l1.liveBid-l1.spxN)/R).toFixed(4);rows.push({lbl:`${l1.exp.toUpperCase()}×${l1.ten} bid ${l1.liveBid}`,val:v,side:"offer",bank:bk});addImp(l0.exp,l0.ten,"offer",v,bk,l1,"bid");}
+              if((l1.side||"offer")==="offer"){
+                // L1 O (you sell L1): counterparty bids L1 → L0 implied BID
+                if(l1.liveBid!=null){const v=+(l0.spxN+(l1.liveBid-l1.spxN)/R).toFixed(4);rows.push({lbl:`${l1.exp.toUpperCase()}×${l1.ten} bid ${l1.liveBid}`,val:v,side:"bid",bank:bk});addImp(l0.exp,l0.ten,"bid",v,bk,l1,"offer");}
               } else {
-                if(l1.liveOffer!=null){const v=+(l0.spxN+(l1.liveOffer-l1.spxN)/R).toFixed(4);rows.push({lbl:`${l1.exp.toUpperCase()}×${l1.ten} offer ${l1.liveOffer}`,val:v,side:"bid",bank:bk});addImp(l0.exp,l0.ten,"bid",v,bk,l1,"offer");}
+                // L1 B (you buy L1): counterparty offers L1 → L0 implied OFFER
+                if(l1.liveOffer!=null){const v=+(l0.spxN+(l1.liveOffer-l1.spxN)/R).toFixed(4);rows.push({lbl:`${l1.exp.toUpperCase()}×${l1.ten} offer ${l1.liveOffer}`,val:v,side:"offer",bank:bk});addImp(l0.exp,l0.ten,"offer",v,bk,l1,"bid");}
               }
               if(l1.liveOffer!=null){const v=+(l0.spxN+(l1.liveOffer-l1.spxN)/R).toFixed(4);rows.push({lbl:`L1 lifts ${l1.liveOffer}`,legLbl:`→${l0.exp.toUpperCase()}×${l0.ten}`,val:v,side:"offer"});addImp(l0.exp,l0.ten,"offer",v);}
               // Merge new implied prices - keep best price across all active spreads
