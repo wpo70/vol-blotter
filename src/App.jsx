@@ -3803,15 +3803,26 @@ export default function App() {
                       <span style={{color:"#5a3080",fontSize:7,fontWeight:700,letterSpacing:".06em"}}>HISTORY</span>
                       <button onClick={()=>setSpreadLog([])} style={{...iS,color:"#4a2020",padding:"0 4px",fontSize:6}}>CLR</button>
                     </div>
-                    {spreadLog.slice(0,8).map(h=>(
-                      <div key={h.id} style={{background:"rgba(20,5,30,.6)",border:"1px solid #2a1a4a",borderRadius:2,padding:"3px 6px",marginBottom:2,display:"flex",alignItems:"center",gap:5}}>
+                    {spreadLog.slice(0,8).map((h,hi)=>{
+                      // Count duplicates (same name, different time) to highlight yellow
+                      const sameNameCount=spreadLog.filter(x=>x.name===h.name).length;
+                      const isBest=hi===spreadLog.findIndex(x=>x.name===h.name); // first occurrence = latest
+                      const borderCol=sameNameCount>1?"#808020":"#2a1a4a";
+                      const nameCol=sameNameCount>1?"#e0c040":"#60a8d0";
+                      // Build price summary from rows
+                      const priceSummary=h.rows?.map(r=>`${r.val}${r.side==="bid"?"b":"o"}`).join(" / ")||"";
+                      return (
+                      <div key={h.id} style={{background:"rgba(20,5,30,.6)",border:`1px solid ${borderCol}`,borderRadius:2,padding:"3px 6px",marginBottom:2,display:"flex",alignItems:"center",gap:5}}>
                         <div style={{flex:1,overflow:"hidden",minWidth:0}}>
-                          <div style={{color:"#7a40a0",fontSize:7,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{h.name}</div>
-                          <div style={{color:"#2a1040",fontSize:6}}>{new Date(h.ts).toLocaleTimeString("en-GB",{hour12:false})}</div>
+                          <div style={{color:nameCol,fontSize:7,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{h.name}</div>
+                          <div style={{display:"flex",gap:6,alignItems:"baseline",marginTop:1}}>
+                            <span style={{color:"#5a96a0",fontSize:8,fontWeight:700,letterSpacing:".02em"}}>{priceSummary}</span>
+                            <span style={{color:"#2a1040",fontSize:6}}>{new Date(h.ts).toLocaleTimeString("en-GB",{hour12:false})}</span>
+                          </div>
                         </div>
                         <button onClick={()=>reloadSpread(h)} style={{...iS,color:"#c080f0",borderColor:"#5a20a0",padding:"1px 5px",fontSize:7,flexShrink:0}}>↺</button>
-                      </div>
-                    ))}
+                      </div>);
+                    })}
                   </div>
                 )}
               </div>
