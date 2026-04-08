@@ -3349,19 +3349,11 @@ export default function App() {
 
                             {(()=>{
                               const spr=spreadImplied[`${exp}|${ten}`];
-                              if(!spr) return null;
-                              const ob=bids.slice().sort((a,b)=>b.price-a.price)[0]?.price??null;
-                              const oo=offers.slice().sort((a,b)=>a.price-b.price)[0]?.price??null;
-                              const bidImprove = spr.bid!=null&&(ob==null||spr.bid>ob) ? spr.bid-(ob??spr.bid-1) : -Infinity;
-                              const offImprove = spr.offer!=null&&(oo==null||spr.offer<oo) ? (oo??spr.offer+1)-spr.offer : -Infinity;
-                              const showBid = bidImprove>-Infinity && bidImprove>=offImprove;
-                              const showOff = offImprove>-Infinity && offImprove>bidImprove;
-                              if(!showBid&&!showOff) return null;
-                              return(
-                              <div style={{textAlign:"center",marginBottom:1}}>
-                                {showBid&&<div style={{color:"#c080f0",fontWeight:700,fontSize:11}}>{spr.bid.toFixed(4)}<span style={{color:"#5a2090",fontSize:7,marginLeft:2}}>leg</span></div>}
-                                {showOff&&<div style={{color:"#9050d0",fontWeight:700,fontSize:11}}>{spr.offer.toFixed(4)}<span style={{color:"#5a2090",fontSize:7,marginLeft:2}}>leg</span></div>}
-                              </div>);})()}
+                              if(!spr?.bid) return null;
+                              const ob=bids.filter(q=>!isReferred(cellKey(exp,ten),"bids",q.id)).sort((a,b)=>b.price-a.price)[0]?.price??null;
+                              if(ob!=null&&spr.bid<=ob) return null;
+                              return <div style={{color:"#c080f0",fontWeight:700,fontSize:11,textAlign:"center"}}>{spr.bid.toFixed(4)}<span style={{color:"#5a2090",fontSize:7,marginLeft:2}}>leg</span></div>;
+                            })()}
                             {/* BIDS — best only, full depth on hover */}
                             {(isHov ? bids : bids.slice(0,1)).map((q,i)=>{
                               const ref = isReferred(k,"bids",q.id);
@@ -3408,6 +3400,13 @@ export default function App() {
                               );
                             })}
 
+                            {(()=>{
+                              const spr2=spreadImplied[`${exp}|${ten}`];
+                              if(!spr2?.offer) return null;
+                              const oo=offers.filter(q=>!isReferred(cellKey(exp,ten),"offers",q.id)).sort((a,b)=>a.price-b.price)[0]?.price??null;
+                              if(oo!=null&&spr2.offer>=oo) return null;
+                              return <div style={{color:"#9050d0",fontWeight:700,fontSize:11,textAlign:"center"}}>{spr2.offer.toFixed(4)}<span style={{color:"#5a2090",fontSize:7,marginLeft:2}}>leg</span></div>;
+                            })()}
                             {isHov && (hasBid||hasOff) && (
                               <div style={{textAlign:"center",marginTop:1}}>
                                 <span onClick={e=>clearCell(k,e)} style={{color:"#4a2020",fontSize:7,cursor:"pointer"}}>CLEAR ALL</span>
@@ -3647,9 +3646,16 @@ export default function App() {
                 return merged;
               });
               const label=name||`${l0.ratioN}:${l1.ratioN} ${l0.exp.toUpperCase()}×${l0.ten} v ${l1.exp.toUpperCase()}×${l1.ten}`;
-              const res={type:"2",rows,l0,l1,R,name:label,ts:new Date().toISOString(),legs:JSON.parse(JSON.stringify(legs))};
+              const res={type:"2",rows,l0,l1,R,name:label,ts:new Date().toISOString(),legs:JSON.parse(JSON.stringify(legs)),imp};
               setSpreadResult(res);
-              if(rows.length>0) setSpreadLog(prev=>{const next=[{id:Date.now(),...res},...prev.filter(h=>h.name!==label)].slice(0,20);return next;});
+              if(rows.length>0) setSpreadLog(prev=>{
+                const next=[{id:Date.now(),...res},...prev.filter(h=>h.name!==label)].slice(0,20);
+                // Rebuild merged implied from ALL active spread entries
+                const merged={};
+                next.forEach(e=>{ if(!e.imp) return; Object.entries(e.imp).forEach(([k,v])=>{ if(!merged[k])merged[k]={}; if(v.bid!=null&&(merged[k].bid==null||v.bid>merged[k].bid))merged[k].bid=v.bid; if(v.offer!=null&&(merged[k].offer==null||v.offer<merged[k].offer))merged[k].offer=v.offer; }); });
+                setSpreadImplied(merged);
+                return next;
+              });
                 // Cross detection - only fire once per solve, not on every quote change
                 const crossMsgs=[];
                 Object.entries(imp).forEach(([k,v])=>{
@@ -3673,7 +3679,16 @@ export default function App() {
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
                   <span style={{color:"#a070d0",fontSize:9,fontWeight:700,letterSpacing:".1em"}}>LEGGED SPREAD</span>
                   <div style={{display:"flex",gap:3}}>
-                    {spreadResult&&<button onClick={()=>{setSpreadResult(null);setSpreadImplied({});}} style={{...iS,color:"#a04040",borderColor:"#3a1a1a",padding:"1px 5px"}}>CLR</button>}
+                    {spreadResult&&<button onClick={()=>{
+                    setSpreadLog(prev=>{
+                      const next=prev.filter(h=>h.name!==spreadResult?.name);
+                      const merged={};
+                      next.forEach(e=>{ if(!e.imp) return; Object.entries(e.imp).forEach(([k,v])=>{ if(!merged[k])merged[k]={}; if(v.bid!=null&&(merged[k].bid==null||v.bid>merged[k].bid))merged[k].bid=v.bid; if(v.offer!=null&&(merged[k].offer==null||v.offer<merged[k].offer))merged[k].offer=v.offer; }); });
+                      setSpreadImplied(merged);
+                      return next;
+                    });
+                    setSpreadResult(null);
+                  }} style={{...iS,color:"#a04040",borderColor:"#3a1a1a",padding:"1px 5px"}}>CLR</button>}
                     {spreadLegs.length<3&&<button onClick={()=>setSpreadLegs(p=>[...p,{exp:"1y",ten:"1Y",spreadPx:"",ratio:"1"}])} style={{...iS,color:"#5a96c8",padding:"1px 5px"}}>+LEG</button>}
                   </div>
                 </div>
