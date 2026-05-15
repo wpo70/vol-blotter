@@ -2748,25 +2748,29 @@ export default function App() {
     const poll = async () => {
       try {
         const since = new Date(Date.now() - 24*60*60*1000).toISOString();
+        // Use trade_date for filtering, notional_ccy for currency — matches pricer exactly
+        const today = new Date(); today.setHours(0,0,0,0);
+        const dateFrom = new Date(today - 2*24*60*60*1000).toISOString().slice(0,10);
         const sdrData = await sbFetch("dtcc_sdr", {
-          select: "execution_timestamp,notional_leg1,strike_pct,opt_tenor,swp_tenor,notional_ccy,embedded_option_type",
-          execution_timestamp: `gte.${since}`,
+          select: "event_timestamp,notional_leg1,strike_pct,opt_tenor,swp_tenor,notional_ccy,option_type_decoded,platform_identifier",
+          notional_ccy: `eq.${activeCcy}`,
+          trade_date: `gte.${dateFrom}`,
           opt_tenor: "not.is.null",
           swp_tenor: "not.is.null",
-          order: "execution_timestamp.desc",
+          order: "event_timestamp.desc",
           limit: "500",
         });
-        console.log("[SDR]", sdrData?.length, "rows for", activeCcy);
+        console.log("[SDR]", sdrData?.length, "rows for", activeCcy, "from", dateFrom);
         if (!sdrData?.length) return;
         const flash = {};
-        sdrData.filter(r => r.notional_ccy === activeCcy).forEach(r => {
+        sdrData.forEach(r => {
           const expKey = sdrExpToKey(r.opt_tenor);
           const tenKey = sdrTenToKey(r.swp_tenor);
           if (!expKey || !tenKey) return;
           const k = `${expKey}|${tenKey}`;
-          const ts = new Date(r.execution_timestamp).getTime();
+          const ts = new Date(r.event_timestamp).getTime();
           if (!flash[k] || ts > flash[k].ts) {
-            flash[k] = { notional: r.notional_leg1, rate: r.strike_pct, type: r.embedded_option_type, ts };
+            flash[k] = { notional: r.notional_leg1, rate: r.strike_pct, type: r.option_type_decoded, ts };
           }
         });
         console.log("[SDR flash]", Object.keys(flash));
@@ -3952,4 +3956,4 @@ export default function App() {
   );
 }
 
-// 1505l
+// 1505n
