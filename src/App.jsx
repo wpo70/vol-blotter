@@ -2767,7 +2767,7 @@ export default function App() {
         if (!sdrData?.length) return;
         const flash = {};
         // Type label mapping: CALL=Payer, PUT=Receiver, STR=Straddle
-        const typeLabel = t => ({CALL:"Payer",PUT:"Receiver",STR:"Straddle",OTH:"Other"}[t]||t||"");
+        const typeLabel = t => ({CALL:"Payer",PUT:"Receiver",STR:"Straddle",STRG:"Strangle",EC:"Euro Swn",BCALL:"Berm Payer",OTH:"Other"}[t]||t||"");
 
         // Straddle detection: pair CALL+PUT with same tenor/strike within 2 mins
         const newt = sdrData.filter(r => r.action_type==="NEWT");
@@ -2778,18 +2778,27 @@ export default function App() {
         payers.forEach(p => {
           const sp = Math.round(parseFloat(p.strike_pct||0)*100)/100;
           const tp = new Date(p.event_timestamp).getTime();
-          const match = rcvrs.find(r => {
+          // First try straddle (same strike)
+          let match = rcvrs.find(r => {
             if (pairedRcvrIds.has(r.dissemination_id)) return false;
             if (r.swp_tenor !== p.swp_tenor || r.opt_tenor !== p.opt_tenor) return false;
             if (Math.abs(Math.round(parseFloat(r.strike_pct||0)*100)/100 - sp) > 0.01) return false;
-            const tr = new Date(r.event_timestamp).getTime();
-            return Math.abs(tr - tp) <= 120000; // within 2 mins
+            return Math.abs(new Date(r.event_timestamp).getTime() - tp) <= 120000;
           });
           if (match) {
             pairedRcvrIds.add(match.dissemination_id);
-            straddles.push({...p, _paired: true, option_type_decoded:"STR",
-              notional_leg1: p.notional_leg1,
-              _label:"Straddle"});
+            straddles.push({...p, _paired:true, option_type_decoded:"STR", _label:"Straddle"});
+            return;
+          }
+          // Then try strangle (different strike, same expiry/tenor, within 2 mins)
+          match = rcvrs.find(r => {
+            if (pairedRcvrIds.has(r.dissemination_id)) return false;
+            if (r.swp_tenor !== p.swp_tenor || r.opt_tenor !== p.opt_tenor) return false;
+            return Math.abs(new Date(r.event_timestamp).getTime() - tp) <= 120000;
+          });
+          if (match) {
+            pairedRcvrIds.add(match.dissemination_id);
+            straddles.push({...p, _paired:true, option_type_decoded:"STRG", _label:"Strangle"});
           }
         });
 
@@ -3354,7 +3363,7 @@ export default function App() {
         const PLATFORM_NAMES={"BGCD":"BGC","TWSF":"Tradition","TSEF":"Tradition","TPSE":"Tullett Prebon",
           "IGDL":"ICAP","ISWE":"ICAP (E)","ISWV":"ICAP (V)","GSEF":"GFI","RTSX":"RTX","RTXS":"RTX",
           "TRWB":"Tradeweb","DWSF":"Dealerweb","BLOM":"Bloomberg","ICSE":"ICE","BILT":"Bilateral","XXXX":"Bilateral"};
-        const TYPE_LABELS={"CALL":"Payer","PUT":"Receiver","STR":"Straddle","EC":"Euro Swn","BCALL":"Berm Payer","NSTD":"Non-std","XCS":"XCCY Swn","OTH":"Other"};
+        const TYPE_LABELS={"CALL":"Payer","PUT":"Receiver","STR":"Straddle","STRG":"Strangle","EC":"Euro Swn","BCALL":"Berm Payer","NSTD":"Non-std","XCS":"XCCY Swn","OTH":"Other"};
         const VENUES=[...new Map(Object.entries(PLATFORM_NAMES).map(([k,v])=>[v,k])).entries()].map(([v,k])=>({k,v}));
         const ACTIONS=["NEWT","MODI","CORR","CANC"];
         const actArr=Array.isArray(sdrFilterAction)?sdrFilterAction:[];
@@ -4039,4 +4048,4 @@ export default function App() {
   );
 }
 
-// 1505u
+// 1505v
