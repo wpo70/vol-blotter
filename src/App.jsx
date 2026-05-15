@@ -2747,14 +2747,13 @@ export default function App() {
     if (!SUPABASE_URL || !SUPABASE_ANON) return;
     const poll = async () => {
       try {
-        const since = new Date(Date.now() - 24*60*60*1000).toISOString();
-        // Use trade_date for filtering, notional_ccy for currency — matches pricer exactly
-        const today = new Date(); today.setHours(0,0,0,0);
+        // Match pricer exactly: trade_date last 2 days, notional_ccy filter
+        const today = new Date();
         const dateFrom = new Date(today - 2*24*60*60*1000).toISOString().slice(0,10);
         const sdrData = await sbFetch("dtcc_sdr", {
           select: "event_timestamp,notional_leg1,strike_pct,opt_tenor,swp_tenor,notional_ccy,option_type_decoded,platform_identifier",
-          notional_ccy: `eq.${activeCcy}`,
           trade_date: `gte.${dateFrom}`,
+          notional_ccy: `eq.${activeCcy}`,
           opt_tenor: "not.is.null",
           swp_tenor: "not.is.null",
           order: "event_timestamp.desc",
@@ -3374,7 +3373,7 @@ export default function App() {
                     // Base = premium heatmap, override with quote state colour
                     let bg = heatBg(viewMode==="premium" ? prem : mid, viewMode==="premium" ? PREM_MIN : VOL_MIN, viewMode==="premium" ? PREM_MAX : VOL_MAX);
                     const _sdr = sdrFlash[k];
-                    const _sdrAge = _sdr ? Date.now() - _sdr.ts : Infinity;
+                    const _sdrAge = _sdr ? (Date.now() - _sdr.ts) : Infinity;
                     if (_sdrAge < 5*60*1000)  bg = "rgba(255,140,0,.6)";
                     else if (_sdrAge < 60*60*1000) bg = "rgba(180,90,0,.35)";
                     if(both)        bg = cross?"rgba(20,50,180,.50)":"rgba(40,70,20,.40)";
@@ -3956,4 +3955,4 @@ export default function App() {
   );
 }
 
-// 1505n
+// 1505o
