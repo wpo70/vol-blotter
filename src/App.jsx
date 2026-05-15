@@ -2799,16 +2799,21 @@ export default function App() {
         const since = new Date(Date.now() - 24*60*60*1000).toISOString();
         const rows = await sbFetch("dtcc_sdr", {
           select: "execution_timestamp,notional_leg1,strike_pct,opt_tenor,swp_tenor,notional_ccy,embedded_option_type,platform_identifier",
-          notional_ccy: `eq.${activeCcy}`,
           execution_timestamp: `gte.${since}`,
+          opt_tenor: "not.is.null",
+          swp_tenor: "not.is.null",
           order: "execution_timestamp.desc",
-          limit: "200",
+          limit: "500",
         });
+        console.log("[SDR raw]", rows?.length, "rows, sample:", JSON.stringify(rows?.[0]));
         console.log("[SDR poll] rows:", rows?.length, "ccy:", activeCcy, "since:", since);
         if (!rows || !rows.length) { console.log("[SDR] no rows returned"); return; }
         // Filter to active currency and swaptions
         const flash = {};
-        rows.forEach(r => {
+        // Filter client-side by currency
+        const ccyRows = rows.filter(r => !r.notional_ccy || r.notional_ccy === activeCcy || r.notional_ccy === '');
+        console.log("[SDR filtered]", ccyRows.length, "rows for", activeCcy);
+        ccyRows.forEach(r => {
           // Match expiry and tenor using correct column names
           const expKey = sdrExpiryToKey(r.opt_tenor);
           const tenKey = sdrTenorToKey(r.swp_tenor);
@@ -2825,6 +2830,7 @@ export default function App() {
             };
           }
         });
+        console.log("[SDR flash cells]", Object.keys(flash));
         setSdrFlash(flash);
         sdrLastTs.current = new Date().toISOString();
       } catch(e) { console.warn("SDR poll error:", e); }
@@ -4001,4 +4007,4 @@ export default function App() {
   );
 }
 
-// 1505h
+// 1505i
