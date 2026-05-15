@@ -3343,19 +3343,34 @@ export default function App() {
 
       {/* LIVE POSITION BAR */}
       {/* SDR FILTER BAR */}
-      <div style={{padding:"3px 18px",borderBottom:"1px solid #1e3450",display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
-        <span style={{fontSize:8,color:"#a05010",letterSpacing:".08em",fontWeight:700}}>SDR</span>
-        {[["Action",sdrFilterAction,setSdrFilterAction,["All","NEWT","MODI","CORR","CANC"]],
-          ["Type",sdrFilterType,setSdrFilterType,["All","CALL","PUT","STR","OTH"]],
-          ["Platform",sdrFilterPlatform,setSdrFilterPlatform,["All","BGC","Tullett Prebon","ICAP","Tradition","Bloomberg","MarketAxess"]]
-        ].map(([lbl,val,set,opts])=>(
-          <select key={lbl} value={val} onChange={e=>set(e.target.value)}
-            style={{background:"#060a10",border:"1px solid #2a3860",color:"#ff9040",fontSize:8,borderRadius:2,padding:"2px 4px",fontFamily:"inherit",outline:"none"}}>
-            {opts.map(o=><option key={o} value={o}>{o}</option>)}
-          </select>
-        ))}
-        <span style={{color:"#5a3010",fontSize:7,marginLeft:4}}>{Object.keys(sdrFlash).length} cells lit</span>
-      </div>
+      {(()=>{
+        const PLATFORM_NAMES={"BGCD":"BGC","TWSF":"Tradition","TSEF":"Tradition","TPSE":"Tullett Prebon",
+          "IGDL":"ICAP","ISWE":"ICAP (E)","ISWV":"ICAP (V)","GSEF":"GFI","RTSX":"RTX","RTXS":"RTX",
+          "TRWB":"Tradeweb","DWSF":"Dealerweb","BLOM":"Bloomberg","ICSE":"ICE","BILT":"Bilateral","XXXX":"Bilateral"};
+        const TYPE_LABELS={"CALL":"Payer","PUT":"Receiver","STR":"Straddle","EC":"Euro Swn",
+          "BCALL":"Berm Payer","NSTD":"Non-std","XCS":"XCCY Swn","OTH":"Other"};
+        const sS={background:"#060a10",border:"1px solid #2a3860",color:"#ff9040",fontSize:8,
+          borderRadius:2,padding:"2px 4px",fontFamily:"inherit",outline:"none"};
+        return (
+          <div style={{padding:"3px 18px",borderBottom:"1px solid #1e3450",display:"flex",gap:6,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
+            <span style={{fontSize:8,color:"#a05010",letterSpacing:".08em",fontWeight:700,flexShrink:0}}>SDR</span>
+            <select value={sdrFilterAction} onChange={e=>setSdrFilterAction(e.target.value)} style={sS}>
+              {["All","NEWT","MODI","CORR","CANC"].map(o=><option key={o} value={o}>{o}</option>)}
+            </select>
+            <select value={sdrFilterType} onChange={e=>setSdrFilterType(e.target.value)} style={sS}>
+              <option value="All">All Types</option>
+              {Object.entries(TYPE_LABELS).map(([k,v])=><option key={k} value={k}>{v}</option>)}
+            </select>
+            <select value={sdrFilterPlatform} onChange={e=>setSdrFilterPlatform(e.target.value)} style={{...sS,minWidth:100}}>
+              <option value="All">All Venues</option>
+              {Object.entries(PLATFORM_NAMES)
+                .filter(([k],i,a)=>a.findIndex(([k2,v2])=>v2===PLATFORM_NAMES[k])===i)
+                .map(([k,v])=><option key={k} value={k}>{v}</option>)}
+            </select>
+            <span style={{color:"#5a3010",fontSize:7}}>{Object.keys(sdrFlash).length} cells</span>
+          </div>
+        );
+      })()}
 
 
       <div style={{background:"#060c16",borderBottom:"1px solid #1a2e44",padding:"5px 18px",display:"flex",gap:16,alignItems:"center",flexShrink:0}}>
@@ -4015,4 +4030,4 @@ export default function App() {
   );
 }
 
-// 1505r
+// 1505s
