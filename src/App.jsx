@@ -2479,57 +2479,20 @@ function OtmItem({q, bkc, removeOtm, addCounter, removeCounter}) {
   );
 }
 
-// ── SDR trade matching ─────────────────────────────────────────────────────
-// Map SDR tenor string to TENORS key
-function sdrTenorToKey(tenorStr) {
-  if (!tenorStr) return null;
-  const s = String(tenorStr).toLowerCase().replace(/\s/g,'');
-  const map = {
-    '1y':'1Y','2y':'2Y','3y':'3Y','4y':'4Y','5y':'5Y','7y':'7Y',
-    '10y':'10Y','12y':'12Y','15y':'15Y','20y':'20Y','25y':'25Y','30y':'30Y',
-    'p1y':'1Y','p2y':'2Y','p3y':'3Y','p5y':'5Y','p7y':'7Y','p10y':'10Y',
-    'p12y':'12Y','p15y':'15Y','p20y':'20Y','p25y':'25Y','p30y':'30Y',
-  };
-  // Try direct match
-  if (map[s]) return map[s];
-  // Try parsing years
-  const m = s.match(/^p?(\d+(?:\.\d+)?)y$/);
-  if (m) {
-    const yr = parseFloat(m[1]);
-    const closest = [1,2,3,4,5,7,10,12,15,20,25,30].reduce((a,b) => Math.abs(b-yr)<Math.abs(a-yr)?b:a);
-    return closest+'Y';
-  }
-  return null;
+function sdrExpToKey(s) {
+  if (!s) return null;
+  const m = {'1W':'1w','1M':'1m','2M':'2m','3M':'3m','6M':'6m','9M':'9m',
+    '1Y':'1y','18M':'18m','1Y6M':'18m','2Y':'2y','3Y':'3y','4Y':'4y','5Y':'5y',
+    '6Y':'6y','7Y':'7y','8Y':'8y','9Y':'9y','10Y':'10y','12Y':'12y',
+    '15Y':'15y','20Y':'20y','25Y':'25y','30Y':'30y'};
+  return m[String(s).toUpperCase()] || null;
 }
-
-// Map SDR expiry string to ALL_EXPIRIES key
-function sdrExpiryToKey(expStr) {
-  if (!expStr) return null;
-  const s = String(expStr).toLowerCase().replace(/\s/g,'');
-  const map = {
-    '1w':'1w','1m':'1m','2m':'2m','3m':'3m','6m':'6m','9m':'9m',
-    '1y':'1y','18m':'18m','2y':'2y','3y':'3y','4y':'4y','5y':'5y',
-    '6y':'6y','7y':'7y','8y':'8y','9y':'9y','10y':'10y','12y':'12y',
-    '15y':'15y','20y':'20y','25y':'25y','30y':'30y',
-  };
-  if (map[s]) return map[s];
-  // Try parsing months/years
-  const mM = s.match(/^(\d+)m$/); if (mM) {
-    const mo = parseInt(mM[1]);
-    const mmap = {1:'1m',2:'2m',3:'3m',6:'6m',9:'9m',12:'1y',18:'18m',24:'2y',36:'3y'};
-    return mmap[mo] || null;
-  }
-  const mY = s.match(/^(\d+)y$/); if (mY) {
-    const yr = parseInt(mY[1]);
-    return yr+'y';
-  }
-  return null;
-}
-
-// Map currency for SDR
-function sdrCcyMatch(ccy, activeCcy) {
-  const map = {USD:'USD', AUD:'AUD', EUR:'EUR', GBP:'GBP', JPY:'JPY'};
-  return map[ccy] === activeCcy;
+function sdrTenToKey(s) {
+  if (!s) return null;
+  const v = String(s).toUpperCase().replace(/\s/g,'');
+  const m = {'1Y':'1Y','2Y':'2Y','3Y':'3Y','4Y':'4Y','5Y':'5Y','7Y':'7Y',
+    '10Y':'10Y','12Y':'12Y','15Y':'15Y','20Y':'20Y','25Y':'25Y','30Y':'30Y','29Y':'30Y'};
+  return m[v] || null;
 }
 
 
@@ -2547,10 +2510,8 @@ export default function App() {
   const [filterTen,  setFilterTen]        = useState(null);
   const [filterMins, setFilterMins]       = useState(null);
   const [sortDir,    setSortDir]          = useState("desc");
+  const [sdrFlash, setSdrFlash] = useState({});
   const [spreadName,   setSpreadName]   = useState("");
-  const [sdrFlash, setSdrFlash] = useState({}); // {cellKey: {notional, rate, ts, venue}}
-  const sdrPollRef = React.useRef(null);
-  const sdrLastTs  = React.useRef(null);
   const [spreadTwoWay, setSpreadTwoWay] = useState(false);
   const [spreadLegs,   setSpreadLegs]   = useState([
     {exp:"1y", ten:"1Y",  spreadPx:"", ratio:"8", bank:"", side:"bid"},
@@ -2781,63 +2742,48 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem("vbl_log4", JSON.stringify(log.slice(0,300))); } catch {} }, [log]);
   useEffect(() => { try { localStorage.setItem("vbl_otm2", JSON.stringify(otmQuotes.slice(0,200))); } catch {} }, [otmQuotes]);
   useEffect(() => { try { localStorage.setItem("vbl_spread_log", JSON.stringify(spreadLog.slice(0,100))); } catch {} }, [spreadLog]);
-  // Auto-reload fresh mids when currency tab changes (use ref to prevent loop)
-  const lastCcyRef = React.useRef(null);
-  useEffect(() => {
-    if (SUPABASE_URL && SUPABASE_ANON && activeCcy !== lastCcyRef.current) {
-      lastCcyRef.current = activeCcy;
-      loadFreshMids();
-    }
-  }, [activeCcy]);
-
-  // ── SDR trade poll (every 60s) ──────────────────────────────────────────
+  // SDR trade poll
   useEffect(() => {
     if (!SUPABASE_URL || !SUPABASE_ANON) return;
-    const pollSdr = async () => {
+    const poll = async () => {
       try {
-        // Fetch trades from last 2 hours for active currency
         const since = new Date(Date.now() - 24*60*60*1000).toISOString();
-        const sdrRows = await sbFetch("dtcc_sdr", {
-          select: "execution_timestamp,notional_leg1,strike_pct,opt_tenor,swp_tenor,notional_ccy,embedded_option_type,platform_identifier",
+        const sdrData = await sbFetch("dtcc_sdr", {
+          select: "execution_timestamp,notional_leg1,strike_pct,opt_tenor,swp_tenor,notional_ccy,embedded_option_type",
           execution_timestamp: `gte.${since}`,
           opt_tenor: "not.is.null",
           swp_tenor: "not.is.null",
           order: "execution_timestamp.desc",
           limit: "500",
         });
-        console.log("[SDR raw]", sdrRows?.length, "rows, sample:", JSON.stringify(sdrRows?.[0]));
-        console.log("[SDR poll] rows:", sdrRows?.length, "ccy:", activeCcy, "since:", since);
-        if (!sdrRows || !sdrRows.length) { console.log("[SDR] no rows returned"); return; }
-        // Filter to active currency and swaptions
+        console.log("[SDR]", sdrData?.length, "rows for", activeCcy);
+        if (!sdrData?.length) return;
         const flash = {};
-        // Filter client-side by currency
-        const ccyRows = sdrRows.filter(r => !r.notional_ccy || r.notional_ccy === activeCcy || r.notional_ccy === '');
-        console.log("[SDR filtered]", ccyRows.length, "rows for", activeCcy);
-        ccyRows.forEach(r => {
-          // Match expiry and tenor using correct column names
-          const expKey = sdrExpiryToKey(r.opt_tenor);
-          const tenKey = sdrTenorToKey(r.swp_tenor);
+        sdrData.filter(r => r.notional_ccy === activeCcy).forEach(r => {
+          const expKey = sdrExpToKey(r.opt_tenor);
+          const tenKey = sdrTenToKey(r.swp_tenor);
           if (!expKey || !tenKey) return;
           const k = `${expKey}|${tenKey}`;
           const ts = new Date(r.execution_timestamp).getTime();
           if (!flash[k] || ts > flash[k].ts) {
-            flash[k] = {
-              notional: r.notional_leg1,
-              rate: r.strike_pct,
-              type: r.embedded_option_type,
-              platform: r.platform_identifier,
-              ts,
-            };
+            flash[k] = { notional: r.notional_leg1, rate: r.strike_pct, type: r.embedded_option_type, ts };
           }
         });
-        console.log("[SDR flash cells]", Object.keys(flash));
+        console.log("[SDR flash]", Object.keys(flash));
         setSdrFlash(flash);
-        sdrLastTs.current = new Date().toISOString();
-      } catch(e) { console.warn("SDR poll error:", e); }
+      } catch(e) { console.warn("[SDR error]", e); }
     };
-    pollSdr();
-    sdrPollRef.current = setInterval(pollSdr, 60000);
-    return () => clearInterval(sdrPollRef.current);
+    poll();
+    const t = setInterval(poll, 60000);
+    return () => clearInterval(t);
+  }, [activeCcy]);
+  // Auto-reload fresh mids when currency tab changes
+  const _lastCcy = React.useRef(null);
+  useEffect(() => {
+    if (SUPABASE_URL && SUPABASE_ANON && activeCcy !== _lastCcy.current) {
+      _lastCcy.current = activeCcy;
+      loadFreshMids();
+    }
   }, [activeCcy]);
   useEffect(() => { if (activeCell && bidRef.current) bidRef.current.focus(); }, [activeCell]);
 
@@ -3420,16 +3366,13 @@ export default function App() {
                     const both     = hasBid&&hasOff;
                     const cross    = both && bids[0].price>=offers[0].price;
                     const dispMid  = viewMode==="premium" ? prem?.toFixed(1) : mid?.toFixed(4);
-                    const sdrLabel = sdrHit && sdrRecent ? `${sdrHit.type||'SDR'} ${sdrHit.notional ? (sdrHit.notional/1e6).toFixed(0)+'M' : ''} ${sdrHit.rate ? (sdrHit.rate*100).toFixed(3)+'%' : ''}`.trim() : null;
 
                     // Base = premium heatmap, override with quote state colour
                     let bg = heatBg(viewMode==="premium" ? prem : mid, viewMode==="premium" ? PREM_MIN : VOL_MIN, viewMode==="premium" ? PREM_MAX : VOL_MAX);
-                    // SDR flash override — orange for recent trades
-                    const sdrHit = sdrFlash[k];
-                    const sdrAge = sdrHit ? (Date.now() - sdrHit.ts) : Infinity;
-                    const sdrRecent = sdrAge < 60*60*1000; // within 1 hour
-                    const sdrVeryRecent = sdrAge < 5*60*1000; // within 5 mins = bright orange
-                    if (sdrRecent) bg = sdrVeryRecent ? "rgba(255,140,0,.55)" : "rgba(180,90,0,.30)";
+                    const _sdr = sdrFlash[k];
+                    const _sdrAge = _sdr ? Date.now() - _sdr.ts : Infinity;
+                    if (_sdrAge < 5*60*1000)  bg = "rgba(255,140,0,.6)";
+                    else if (_sdrAge < 60*60*1000) bg = "rgba(180,90,0,.35)";
                     if(both)        bg = cross?"rgba(20,50,180,.50)":"rgba(40,70,20,.40)";
                     else if(hasBid) bg = "rgba(0,80,30,.35)";
                     else if(hasOff) bg = "rgba(100,45,0,.30)";
@@ -3494,7 +3437,9 @@ export default function App() {
                             <div style={{textAlign:"center",color:(hasBid||hasOff)?"#508090":"#68a0ba",fontSize:(hasBid||hasOff)?8:11,fontWeight:(hasBid||hasOff)?400:500,opacity:(hasBid||hasOff)?.45:1,marginBottom:(hasBid||hasOff)?1:0}}>
                               {dispMid ?? "--"}
                             </div>
-                            {sdrLabel&&<div style={{color:sdrVeryRecent?"#ff8c00":"#804010",fontSize:7,textAlign:"center",fontWeight:700,marginBottom:1,letterSpacing:".04em"}}>{sdrLabel}</div>}
+                            {_sdr && _sdrAge < 60*60*1000 && <div style={{color:_sdrAge<5*60*1000?"#ff8c00":"#a05010",fontSize:7,textAlign:"center",fontWeight:700}}>
+                              {_sdr.type||"SDR"} {_sdr.notional?(+_sdr.notional/1e6).toFixed(0)+"M":""}
+                            </div>}
 
                             {(()=>{
                               const spr=spreadImplied[`${exp}|${ten}`];
@@ -4007,4 +3952,4 @@ export default function App() {
   );
 }
 
-// 1505k
+// 1505l
