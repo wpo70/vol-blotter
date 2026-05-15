@@ -2797,7 +2797,7 @@ export default function App() {
       try {
         // Fetch trades from last 2 hours for active currency
         const since = new Date(Date.now() - 24*60*60*1000).toISOString();
-        const rows = await sbFetch("dtcc_sdr", {
+        const sdrRows = await sbFetch("dtcc_sdr", {
           select: "execution_timestamp,notional_leg1,strike_pct,opt_tenor,swp_tenor,notional_ccy,embedded_option_type,platform_identifier",
           execution_timestamp: `gte.${since}`,
           opt_tenor: "not.is.null",
@@ -2805,13 +2805,13 @@ export default function App() {
           order: "execution_timestamp.desc",
           limit: "500",
         });
-        console.log("[SDR raw]", rows?.length, "rows, sample:", JSON.stringify(rows?.[0]));
-        console.log("[SDR poll] rows:", rows?.length, "ccy:", activeCcy, "since:", since);
-        if (!rows || !rows.length) { console.log("[SDR] no rows returned"); return; }
+        console.log("[SDR raw]", sdrRows?.length, "rows, sample:", JSON.stringify(sdrRows?.[0]));
+        console.log("[SDR poll] rows:", sdrRows?.length, "ccy:", activeCcy, "since:", since);
+        if (!sdrRows || !sdrRows.length) { console.log("[SDR] no rows returned"); return; }
         // Filter to active currency and swaptions
         const flash = {};
         // Filter client-side by currency
-        const ccyRows = rows.filter(r => !r.notional_ccy || r.notional_ccy === activeCcy || r.notional_ccy === '');
+        const ccyRows = sdrRows.filter(r => !r.notional_ccy || r.notional_ccy === activeCcy || r.notional_ccy === '');
         console.log("[SDR filtered]", ccyRows.length, "rows for", activeCcy);
         ccyRows.forEach(r => {
           // Match expiry and tenor using correct column names
@@ -4007,4 +4007,4 @@ export default function App() {
   );
 }
 
-// 1505i
+// 1505k
