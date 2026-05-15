@@ -2781,9 +2781,13 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem("vbl_log4", JSON.stringify(log.slice(0,300))); } catch {} }, [log]);
   useEffect(() => { try { localStorage.setItem("vbl_otm2", JSON.stringify(otmQuotes.slice(0,200))); } catch {} }, [otmQuotes]);
   useEffect(() => { try { localStorage.setItem("vbl_spread_log", JSON.stringify(spreadLog.slice(0,100))); } catch {} }, [spreadLog]);
-  // Auto-reload fresh mids when currency tab changes
+  // Auto-reload fresh mids when currency tab changes (use ref to prevent loop)
+  const lastCcyRef = React.useRef(null);
   useEffect(() => {
-    if (SUPABASE_URL && SUPABASE_ANON) loadFreshMids();
+    if (SUPABASE_URL && SUPABASE_ANON && activeCcy !== lastCcyRef.current) {
+      lastCcyRef.current = activeCcy;
+      loadFreshMids();
+    }
   }, [activeCcy]);
 
   // ── SDR trade poll (every 60s) ──────────────────────────────────────────
@@ -2800,7 +2804,8 @@ export default function App() {
           order: "execution_timestamp.desc",
           limit: "200",
         });
-        if (!rows || !rows.length) return;
+        console.log("[SDR poll] rows:", rows?.length, "ccy:", activeCcy, "since:", since);
+        if (!rows || !rows.length) { console.log("[SDR] no rows returned"); return; }
         // Filter to active currency and swaptions
         const flash = {};
         rows.forEach(r => {
@@ -3996,4 +4001,4 @@ export default function App() {
   );
 }
 
-// 1505g
+// 1505h
