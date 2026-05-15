@@ -2511,6 +2511,7 @@ export default function App() {
   const [filterMins, setFilterMins]       = useState(null);
   const [sortDir,    setSortDir]          = useState("desc");
   const [sdrFlash, setSdrFlash] = useState({});
+  const [sdrCfCount, setSdrCfCount] = useState({caps:0,floors:0,total:0});
   const [sdrFilterType,     setSdrFilterType]     = useState("All");
   const [sdrFilterPlatform, setSdrFilterPlatform] = useState("All");
   const [sdrFilterAction,   setSdrFilterAction]   = useState("NEWT");
@@ -2758,7 +2759,7 @@ export default function App() {
           trade_date: `gte.${dateFrom}`,
           notional_ccy: `eq.${activeCcy}`,
           opt_tenor: "not.is.null",
-          swp_tenor: "not.is.null",
+          // swp_tenor: "not.is.null", // include caps/floors (null swp_tenor)
           order: "event_timestamp.desc",
           limit: "500",
         });
@@ -2817,6 +2818,12 @@ export default function App() {
         });
         console.log("[SDR flash]", Object.keys(flash));
         setSdrFlash(flash);
+
+        // Caps & floors: CALL/PUT with null swp_tenor
+        const cfTrades = sdrData.filter(r => !r.swp_tenor || r.swp_tenor.trim()==="");
+        const capCount = cfTrades.filter(r=>r.option_type_decoded==="CALL"||r.option_type_decoded==="BCALL").length;
+        const floorCount = cfTrades.filter(r=>r.option_type_decoded==="PUT").length;
+        setSdrCfCount({caps:capCount, floors:floorCount, total:cfTrades.length});
       } catch(e) { console.warn("[SDR error]", e); }
     };
     poll();
@@ -3255,7 +3262,7 @@ export default function App() {
       <div style={{background:"#0d1520",borderBottom:"1px solid #253d58",padding:"9px 18px",display:"flex",alignItems:"center",gap:14,flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <div style={{width:7,height:7,borderRadius:"50%",background:"#2080e0",boxShadow:"0 0 8px #2080e055"}}/>
-          {[["swaption","SWAPTION"],["capfloor","CAP & FLOOR"]].map(([pid,plbl])=><button key={pid} onClick={()=>setActiveProduct(pid)} style={{background:activeProduct===pid?"rgba(30,80,180,.45)":"transparent",border:`1px solid ${activeProduct===pid?"rgba(60,130,230,.5)":"transparent"}`,color:activeProduct===pid?"#ccd8e4":"#3a6080",padding:"3px 10px",borderRadius:3,cursor:"pointer",fontSize:11,fontWeight:700,letterSpacing:".1em",fontFamily:"inherit"}}>{plbl}</button>)}
+          {[["swaption","SWAPTION"],["capfloor","CAP & FLOOR"]].map(([pid,plbl])=><button key={pid} onClick={()=>setActiveProduct(pid)} style={{background:activeProduct===pid?"rgba(30,80,180,.45)":"transparent",border:`1px solid ${activeProduct===pid?"rgba(60,130,230,.5)":"transparent"}`,color:activeProduct===pid?"#ccd8e4":"#3a6080",padding:"3px 10px",borderRadius:3,cursor:"pointer",fontSize:11,fontWeight:700,letterSpacing:".1em",fontFamily:"inherit"}}>{plbl}{pid==="capfloor"&&sdrCfCount.total>0&&<span style={{marginLeft:4,background:"rgba(180,90,0,.4)",border:"1px solid rgba(255,140,0,.4)",borderRadius:3,fontSize:7,padding:"0 3px",color:"#ff9040",fontWeight:700}}>{sdrCfCount.total}</span>}</button>)}
         </div>
         <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
           <button className={`btn${showExpMgr?" on":""}`} onClick={()=>setShowExpMgr(v=>!v)}>
@@ -4030,4 +4037,4 @@ export default function App() {
   );
 }
 
-// 1505s
+// 1505t
