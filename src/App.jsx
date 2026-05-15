@@ -3978,16 +3978,32 @@ export default function App() {
 
                 {spreadResult?.type==="2"&&spreadResult.rows.length>0&&(
                   <div style={{background:"rgba(40,10,60,.4)",border:"1px solid #4a20a0",borderRadius:3,padding:"6px 8px",marginBottom:5}}>
-                    <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:5}}>
+                    {/* Header: name + bank + 2-way indicator */}
+                    <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:4}}>
                       <span style={{color:"#8040b0",fontSize:7,fontWeight:700,flex:1}}>{spreadResult.name}</span>
+                      {spreadTwoWay&&<span style={{color:"#c0c040",fontSize:7,fontWeight:700,border:"1px solid #808020",borderRadius:2,padding:"0 3px"}}>2-WAY</span>}
                       {spreadResult.l0?.bank&&<span style={{color:bkc(spreadResult.l0.bank),fontSize:8,fontWeight:700}}>{spreadResult.l0.bank}</span>}
                     </div>
+                    {/* Leg summary: SPX L | live bid/offer per leg */}
+                    <div style={{display:"flex",gap:8,marginBottom:5,fontSize:7}}>
+                      {[spreadResult.l0,spreadResult.l1].map((l,i)=>l&&(
+                        <div key={i} style={{flex:1,background:"rgba(20,5,40,.4)",borderRadius:2,padding:"2px 5px"}}>
+                          <span style={{color:"#6a3090"}}>{l.exp?.toUpperCase()}×{l.ten} </span>
+                          <span style={{color:"#c080f0",fontWeight:700}}>{l.spxN}</span>
+                          <span style={{color:"#4a2070"}}> L</span>
+                          {l.liveBid!=null&&<span style={{color:"#00c040",marginLeft:4}}>{l.liveBid}</span>}
+                          {l.liveBid!=null&&l.liveOffer!=null&&<span style={{color:"#3a4050"}}>/</span>}
+                          {l.liveOffer!=null&&<span style={{color:"#ff8c00"}}>{l.liveOffer}</span>}
+                          <span style={{color:l.side==="bid"?"#00c040":"#ff8c00",marginLeft:4,fontWeight:700}}>{l.side==="bid"?"B":"O"}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Results */}
                     {spreadResult.rows.map((r,i)=>(
                       <div key={i} style={{display:"flex",alignItems:"baseline",gap:4,marginBottom:3,paddingBottom:3,borderBottom:i<spreadResult.rows.length-1?"1px solid #2a1050":"none"}}>
                         <span style={{color:"#4a2070",fontSize:7,flex:1}}>{r.lbl}</span>
-                        <span style={{color:"#5a3090",fontSize:7}}>{r.legLbl}</span>
-                        <span style={{color:r.side==="bid"?"#00c040":"#ff8c00",fontWeight:700,fontSize:13}}>{r.val}</span>
-                        <span style={{color:"#6a3090",fontSize:7}}>{r.side}</span>
+                        <span style={{color:r.side==="bid"?"#00c040":"#ff8c00",fontWeight:700,fontSize:14}}>{r.val}</span>
+                        <span style={{color:r.side==="bid"?"#00c040":"#ff8c00",fontSize:7,fontWeight:700}}>{r.side==="bid"?"BID":"OFFER"}</span>
                       </div>
                     ))}
                     <div style={{color:"#2a1050",fontSize:7,marginTop:3}}>best price only · auto-updates</div>
@@ -4048,4 +4064,4 @@ export default function App() {
   );
 }
 
-// 1505v
+// 1505w
