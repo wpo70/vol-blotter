@@ -2792,7 +2792,7 @@ export default function App() {
     const pollSdr = async () => {
       try {
         // Fetch trades from last 2 hours for active currency
-        const since = new Date(Date.now() - 2*60*60*1000).toISOString();
+        const since = new Date(Date.now() - 24*60*60*1000).toISOString();
         const rows = await sbFetch("dtcc_sdr", {
           select: "execution_timestamp,notional_amount,fixed_rate,option_expiry,tenor,asset_class,currency",
           asset_class: "eq.Interest Rate",
@@ -3997,4 +3997,4 @@ export default function App() {
   );
 }
 
-// 1505e
+// 1505f
