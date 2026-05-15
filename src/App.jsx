@@ -1552,7 +1552,7 @@ function CapFloorPanel({ spreadImplied={}, ccy, subMenu, hiddenSt, setHiddenSt, 
           swpQuotes={swpQuotes} swpReferred={swpReferred}
           cfQuotes={cfQuotes} cfRef={cfRef}
           cfBkCol={cfBkCol}
-          liveWedgeMids={liveWedgeMids} livePremMatrix={ccy==="AUD"?livePremMatrix:null}/>
+          liveWedgeMids={liveWedgeMids} livePremMatrix={livePremMatrix}/>
       </div>
 
       {/* ── CUSTOM (persistent) ── */}
@@ -2673,7 +2673,7 @@ export default function App() {
     return m;
   }, [liveFwdMap, liveWedgeMids]);
   const FWD      = (activeCcy === "AUD" && liveFwdMatrix) ? liveFwdMatrix : (CCY_FWD[activeCcy] || AUD_FWD);
-  const MID      = (activeCcy === "AUD" && liveMidMatrix) ? liveMidMatrix : (CCY_MID[activeCcy] || AUD_MID);
+  const MID      = liveMidMatrix ? liveMidMatrix : (CCY_MID[activeCcy] || AUD_MID);
   if (liveMidMatrix) console.log('[MID debug] liveMidMatrix 1w,1Y=', liveMidMatrix['1w']?.[0], 'AUD_MID 1w,1Y=', AUD_MID['1w']?.[0], 'using live=', MID===liveMidMatrix);
   // Live premium matrix: use pricer-published atm_prems if available,
   // else blotter_mids overrides, else ratio scaling fallback
@@ -2716,7 +2716,7 @@ export default function App() {
     });
     return m;
   }, [liveMidMatrix, livePremData, liveWedgeMids]);
-  const PREMIUM  = (activeCcy === "AUD" && livePremMatrix) ? livePremMatrix : (CCY_PREM[activeCcy] || AUD_PREM);
+  const PREMIUM  = livePremMatrix ? livePremMatrix : (CCY_PREM[activeCcy] || AUD_PREM);
   const [VOL_MIN,  VOL_MAX]  = CCY_VOL_RANGE[activeCcy]  || [59,87];
   const [PREM_MIN, PREM_MAX] = CCY_PREM_RANGE[activeCcy] || [6,1700];
   const [ccyStore, setCcyStore] = useState({AUD:{quotes:{},log:[],referred:new Set()},USD:{quotes:{},log:[],referred:new Set()},EUR:{quotes:{},log:[],referred:new Set()},JPY:{quotes:{},log:[],referred:new Set()}});
@@ -3884,4 +3884,4 @@ export default function App() {
   );
 }
 
-// 1505b
+// 1505c
