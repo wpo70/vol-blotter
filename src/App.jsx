@@ -2511,6 +2511,9 @@ export default function App() {
   const [filterMins, setFilterMins]       = useState(null);
   const [sortDir,    setSortDir]          = useState("desc");
   const [sdrFlash, setSdrFlash] = useState({});
+  const [sdrFilterType,     setSdrFilterType]     = useState("All");
+  const [sdrFilterPlatform, setSdrFilterPlatform] = useState("All");
+  const [sdrFilterAction,   setSdrFilterAction]   = useState("NEWT");
   const [spreadName,   setSpreadName]   = useState("");
   const [spreadTwoWay, setSpreadTwoWay] = useState(false);
   const [spreadLegs,   setSpreadLegs]   = useState([
@@ -2751,7 +2754,7 @@ export default function App() {
         const today = new Date();
         const dateFrom = new Date(today - 2*24*60*60*1000).toISOString().slice(0,10);
         const sdrData = await sbFetch("dtcc_sdr", {
-          select: "event_timestamp,notional_leg1,strike_pct,opt_tenor,swp_tenor,notional_ccy,option_type_decoded,platform_identifier",
+          select: "dissemination_id,event_timestamp,notional_leg1,strike_pct,opt_tenor,swp_tenor,notional_ccy,option_type_decoded,platform_identifier,action_type",
           trade_date: `gte.${dateFrom}`,
           notional_ccy: `eq.${activeCcy}`,
           opt_tenor: "not.is.null",
@@ -2762,14 +2765,54 @@ export default function App() {
         console.log("[SDR]", sdrData?.length, "rows for", activeCcy, "from", dateFrom);
         if (!sdrData?.length) return;
         const flash = {};
-        sdrData.forEach(r => {
+        // Type label mapping: CALL=Payer, PUT=Receiver, STR=Straddle
+        const typeLabel = t => ({CALL:"Payer",PUT:"Receiver",STR:"Straddle",OTH:"Other"}[t]||t||"");
+
+        // Straddle detection: pair CALL+PUT with same tenor/strike within 2 mins
+        const newt = sdrData.filter(r => r.action_type==="NEWT");
+        const payers = newt.filter(r => r.option_type_decoded==="CALL");
+        const rcvrs  = newt.filter(r => r.option_type_decoded==="PUT");
+        const pairedRcvrIds = new Set();
+        const straddles = [];
+        payers.forEach(p => {
+          const sp = Math.round(parseFloat(p.strike_pct||0)*100)/100;
+          const tp = new Date(p.event_timestamp).getTime();
+          const match = rcvrs.find(r => {
+            if (pairedRcvrIds.has(r.dissemination_id)) return false;
+            if (r.swp_tenor !== p.swp_tenor || r.opt_tenor !== p.opt_tenor) return false;
+            if (Math.abs(Math.round(parseFloat(r.strike_pct||0)*100)/100 - sp) > 0.01) return false;
+            const tr = new Date(r.event_timestamp).getTime();
+            return Math.abs(tr - tp) <= 120000; // within 2 mins
+          });
+          if (match) {
+            pairedRcvrIds.add(match.dissemination_id);
+            straddles.push({...p, _paired: true, option_type_decoded:"STR",
+              notional_leg1: p.notional_leg1,
+              _label:"Straddle"});
+          }
+        });
+
+        // Build flash map from all trades
+        const allTrades = [
+          ...straddles,
+          ...newt.filter(r => r.option_type_decoded==="CALL" && !straddles.find(s=>s.dissemination_id===r.dissemination_id)),
+          ...newt.filter(r => r.option_type_decoded==="PUT"  && !pairedRcvrIds.has(r.dissemination_id)),
+          ...newt.filter(r => !["CALL","PUT"].includes(r.option_type_decoded)),
+          ...sdrData.filter(r => r.action_type!=="NEWT"),
+        ]
+          .filter(r => sdrFilterAction==="All" || r.action_type===sdrFilterAction)
+          .filter(r => sdrFilterType==="All"   || r.option_type_decoded===sdrFilterType)
+          .filter(r => sdrFilterPlatform==="All" || r.platform_identifier===sdrFilterPlatform);
+
+        allTrades.forEach(r => {
           const expKey = sdrExpToKey(r.opt_tenor);
           const tenKey = sdrTenToKey(r.swp_tenor);
           if (!expKey || !tenKey) return;
           const k = `${expKey}|${tenKey}`;
           const ts = new Date(r.event_timestamp).getTime();
           if (!flash[k] || ts > flash[k].ts) {
-            flash[k] = { notional: r.notional_leg1, rate: r.strike_pct, type: r.option_type_decoded, ts };
+            flash[k] = { notional: r.notional_leg1, rate: r.strike_pct,
+              type: typeLabel(r.option_type_decoded), ts };
           }
         });
         console.log("[SDR flash]", Object.keys(flash));
@@ -3299,6 +3342,22 @@ export default function App() {
       )}
 
       {/* LIVE POSITION BAR */}
+      {/* SDR FILTER BAR */}
+      <div style={{padding:"3px 18px",borderBottom:"1px solid #1e3450",display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
+        <span style={{fontSize:8,color:"#a05010",letterSpacing:".08em",fontWeight:700}}>SDR</span>
+        {[["Action",sdrFilterAction,setSdrFilterAction,["All","NEWT","MODI","CORR","CANC"]],
+          ["Type",sdrFilterType,setSdrFilterType,["All","CALL","PUT","STR","OTH"]],
+          ["Platform",sdrFilterPlatform,setSdrFilterPlatform,["All","BGC","Tullett Prebon","ICAP","Tradition","Bloomberg","MarketAxess"]]
+        ].map(([lbl,val,set,opts])=>(
+          <select key={lbl} value={val} onChange={e=>set(e.target.value)}
+            style={{background:"#060a10",border:"1px solid #2a3860",color:"#ff9040",fontSize:8,borderRadius:2,padding:"2px 4px",fontFamily:"inherit",outline:"none"}}>
+            {opts.map(o=><option key={o} value={o}>{o}</option>)}
+          </select>
+        ))}
+        <span style={{color:"#5a3010",fontSize:7,marginLeft:4}}>{Object.keys(sdrFlash).length} cells lit</span>
+      </div>
+
+
       <div style={{background:"#060c16",borderBottom:"1px solid #1a2e44",padding:"5px 18px",display:"flex",gap:16,alignItems:"center",flexShrink:0}}>
         <span style={{fontSize:9,color:"#3a6080",letterSpacing:".1em",flexShrink:0}}>LIVE</span>
         {[{l:"BIDS",v:bidCt,c:"#00c040"},{l:"OFFERS",v:offrCt,c:"#ff8c00"},{l:"2-WAY",v:twowayCt,c:"#4890d0"},{l:"CROSSED",v:crossCt,c:crossCt?"#5090e0":"#243c54"}].map(s=>(
@@ -3956,4 +4015,4 @@ export default function App() {
   );
 }
 
-// 1505p
+// 1505r
