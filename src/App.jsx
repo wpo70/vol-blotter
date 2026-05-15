@@ -22,9 +22,12 @@ async function sbFetch(path, params = {}) {
 
 // Fetch latest AUD ATM vol surface from vol_history
 async function fetchLatestAudVols() {
+  return fetchLatestVols("AUD");
+}
+async function fetchLatestVols(ccy) {
   const rows = await sbFetch("vol_history", {
     select: "atm_vols,atm_prems,snapshot_date",
-    currency: "eq.AUD",
+    currency: `eq.${ccy}`,
     order: "snapshot_date.desc",
     limit: "1",
   });
@@ -33,6 +36,27 @@ async function fetchLatestAudVols() {
 }
 
 // Fetch forward swap rates from swap_rates (3M BBSW, latest date)
+async function fetchLatestFwdRates(ccy) {
+  // Generic version for USD/EUR - uses SOFR for USD, EURIBOR for EUR
+  const floatMap = {AUD:"3M BBSW", USD:"SOFR", EUR:"6M EURIBOR", NZD:"3M BKBM"};
+  const floatRate = floatMap[ccy] || "SOFR";
+  const dates = await sbFetch("swap_rates", {
+    select: "date",
+    currency: `eq.${ccy}`,
+    floating_rate: `eq.${floatRate}`,
+    order: "date.desc",
+    limit: "1",
+  });
+  if (!dates || !dates.length) return null;
+  const latestDate = dates[0].date;
+  const rows = await sbFetch("swap_rates", {
+    select: "tenor,rate",
+    currency: `eq.${ccy}`,
+    floating_rate: `eq.${floatRate}`,
+    date: `eq.${latestDate}`,
+  });
+  return rows || [];
+}
 async function fetchLatestAudFwdRates() {
   // Get max date
   const dates = await sbFetch("swap_rates", {
@@ -675,7 +699,7 @@ function FwdCfsCell({ quotes, referred, onRefer, onDel, onClick, active, prevQuo
 // ── Wedge Panel ──────────────────────────────────────────────
 function WedgePanel({ spreadImplied={}, ccy, wedgeQuotes, wedgeRef, wedgeLog=[], setWedgeLog, wedgeActive, setWedgeActive, wedgeFwdImp, setWedgeFwdImp, addWedgeQuote, reloadWedgeQuote, toggleWedgeRef, delWedgeQ, swpQuotes={}, swpReferred, cfQuotes={}, cfRef={}, cfBkCol, liveWedgeMids={}, livePremMatrix=null }) {
   const TENORS_IDX = {"1Y":0,"2Y":1,"3Y":2,"4Y":3,"5Y":4,"7Y":5,"10Y":6,"12Y":7,"15Y":8,"20Y":9};
-  const prem = (ccy==="AUD" && livePremMatrix) ? livePremMatrix : (ccy==="AUD" ? AUD_PREM : null);
+  const prem = livePremMatrix ? livePremMatrix : (ccy==="AUD" ? AUD_PREM : null);
   const swpMid = (exp,ten) => {
     if(!prem||!prem[exp]) return null;
     const idx = TENORS_IDX[ten];
@@ -1390,7 +1414,7 @@ function CapFloorPanel({ spreadImplied={}, ccy, subMenu, hiddenSt, setHiddenSt, 
 
   // build wedge lookup: {`${s}x${e}` -> {leggedBid, leggedBidSwpBank, leggedBidWedgeBank, leggedOffer, leggedOfferSwpBank, leggedOfferWedgeBank}}
   const wedgeLookup = React.useMemo(()=>{
-    const AUD_PREM_LOCAL = (ccy==="AUD" && livePremMatrix) ? livePremMatrix : (ccy==="AUD" ? AUD_PREM : null);
+    const AUD_PREM_LOCAL = livePremMatrix ? livePremMatrix : (ccy==="AUD" ? AUD_PREM : null);
     const TENORS_IDX_LOCAL = {"1Y":0,"2Y":1,"3Y":2,"4Y":3,"5Y":4,"7Y":5,"10Y":6,"12Y":7,"15Y":8,"20Y":9};
     const map = {};
     WEDGE_ROWS.forEach(row=>{
@@ -2559,10 +2583,11 @@ export default function App() {
     }
     setMidsLoading(true);
     try {
+      const _ccy = activeCcy || "AUD";
       const [volSnap, fwdRows, wedgeRows] = await Promise.all([
-        fetchLatestAudVols(),
-        fetchLatestAudFwdRates(),
-        fetchBlotterMids("AUD"),
+        fetchLatestVols(_ccy),
+        _ccy === "AUD" ? fetchLatestAudFwdRates() : fetchLatestFwdRates(_ccy),
+        fetchBlotterMids(_ccy),
       ]);
 
       const liveResult = buildLiveMidMatrix(volSnap?.atm_vols, ALL_EXPIRIES, TENORS);
@@ -2571,7 +2596,7 @@ export default function App() {
       const newLiveExpiries = liveResult?.liveExpiries ?? new Set();
       liveExpiriesRef.current = newLiveExpiries;
       const newFwdMap    = buildLiveFwdMatrix(fwdRows, ALL_EXPIRIES);
-      const newStrikeMap = buildLiveStrikeMap(newFwdMap, "AUD");
+      const newStrikeMap = buildLiveStrikeMap(newFwdMap, _ccy);
 
       // Build wedge mids map from blotter_mids rows
       const newWedgeMids = {};
