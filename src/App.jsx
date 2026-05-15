@@ -3374,8 +3374,9 @@ export default function App() {
                     let bg = heatBg(viewMode==="premium" ? prem : mid, viewMode==="premium" ? PREM_MIN : VOL_MIN, viewMode==="premium" ? PREM_MAX : VOL_MAX);
                     const _sdr = sdrFlash[k];
                     const _sdrAge = _sdr ? (Date.now() - _sdr.ts) : Infinity;
-                    if (_sdrAge < 5*60*1000)  bg = "rgba(255,140,0,.6)";
-                    else if (_sdrAge < 60*60*1000) bg = "rgba(180,90,0,.35)";
+                    if (_sdrAge < 30*60*1000)       bg = "rgba(255,140,0,.70)"; // < 30min bright
+                    else if (_sdrAge < 4*60*60*1000) bg = "rgba(200,100,0,.45)"; // < 4hr medium
+                    else if (_sdrAge < 24*60*60*1000) bg = "rgba(140,70,0,.25)"; // < 24hr dim
                     if(both)        bg = cross?"rgba(20,50,180,.50)":"rgba(40,70,20,.40)";
                     else if(hasBid) bg = "rgba(0,80,30,.35)";
                     else if(hasOff) bg = "rgba(100,45,0,.30)";
@@ -3440,7 +3441,7 @@ export default function App() {
                             <div style={{textAlign:"center",color:(hasBid||hasOff)?"#508090":"#68a0ba",fontSize:(hasBid||hasOff)?8:11,fontWeight:(hasBid||hasOff)?400:500,opacity:(hasBid||hasOff)?.45:1,marginBottom:(hasBid||hasOff)?1:0}}>
                               {dispMid ?? "--"}
                             </div>
-                            {_sdr && _sdrAge < 60*60*1000 && <div style={{color:_sdrAge<5*60*1000?"#ff8c00":"#a05010",fontSize:7,textAlign:"center",fontWeight:700}}>
+                            {_sdr && _sdrAge < 24*60*60*1000 && <div style={{color:_sdrAge<5*60*1000?"#ff8c00":"#a05010",fontSize:7,textAlign:"center",fontWeight:700}}>
                               {_sdr.type||"SDR"} {_sdr.notional?(+_sdr.notional/1e6).toFixed(0)+"M":""}
                             </div>}
 
@@ -3955,4 +3956,4 @@ export default function App() {
   );
 }
 
-// 1505o
+// 1505p
