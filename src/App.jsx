@@ -2724,6 +2724,10 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem("vbl_log4", JSON.stringify(log.slice(0,300))); } catch {} }, [log]);
   useEffect(() => { try { localStorage.setItem("vbl_otm2", JSON.stringify(otmQuotes.slice(0,200))); } catch {} }, [otmQuotes]);
   useEffect(() => { try { localStorage.setItem("vbl_spread_log", JSON.stringify(spreadLog.slice(0,100))); } catch {} }, [spreadLog]);
+  // Auto-reload fresh mids when currency tab changes
+  useEffect(() => {
+    if (SUPABASE_URL && SUPABASE_ANON) loadFreshMids();
+  }, [activeCcy]);
   useEffect(() => { if (activeCell && bidRef.current) bidRef.current.focus(); }, [activeCell]);
 
   const visibleExpiries = ALL_EXPIRIES.filter(e => !hiddenExpiries.has(e));
@@ -3884,4 +3888,4 @@ export default function App() {
   );
 }
 
-// 1505c
+// 1505d
