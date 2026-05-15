@@ -2794,8 +2794,8 @@ export default function App() {
         // Fetch trades from last 2 hours for active currency
         const since = new Date(Date.now() - 24*60*60*1000).toISOString();
         const rows = await sbFetch("dtcc_sdr", {
-          select: "execution_timestamp,notional_amount,fixed_rate,option_expiry,tenor,asset_class,currency",
-          asset_class: "eq.Interest Rate",
+          select: "execution_timestamp,notional_leg1,strike_pct,opt_tenor,swp_tenor,notional_ccy,embedded_option_type,platform_identifier",
+          notional_ccy: `eq.${activeCcy}`,
           execution_timestamp: `gte.${since}`,
           order: "execution_timestamp.desc",
           limit: "200",
@@ -2804,20 +2804,19 @@ export default function App() {
         // Filter to active currency and swaptions
         const flash = {};
         rows.forEach(r => {
-          if (!sdrCcyMatch(r.currency, activeCcy)) return;
-          // Match expiry and tenor
-          const expKey = sdrExpiryToKey(r.option_expiry);
-          const tenKey = sdrTenorToKey(r.tenor);
+          // Match expiry and tenor using correct column names
+          const expKey = sdrExpiryToKey(r.opt_tenor);
+          const tenKey = sdrTenorToKey(r.swp_tenor);
           if (!expKey || !tenKey) return;
           const k = `${expKey}|${tenKey}`;
           const ts = new Date(r.execution_timestamp).getTime();
-          // Keep most recent trade per cell
           if (!flash[k] || ts > flash[k].ts) {
             flash[k] = {
-              notional: r.notional_amount,
-              rate: r.fixed_rate,
+              notional: r.notional_leg1,
+              rate: r.strike_pct,
+              type: r.embedded_option_type,
+              platform: r.platform_identifier,
               ts,
-              age: Date.now() - ts, // ms since trade
             };
           }
         });
@@ -3410,7 +3409,7 @@ export default function App() {
                     const both     = hasBid&&hasOff;
                     const cross    = both && bids[0].price>=offers[0].price;
                     const dispMid  = viewMode==="premium" ? prem?.toFixed(1) : mid?.toFixed(4);
-                    const sdrLabel = sdrHit && sdrRecent ? `SDR ${sdrHit.rate ? (sdrHit.rate*100).toFixed(3)+'%' : ''} ${sdrHit.notional ? (sdrHit.notional/1e6).toFixed(0)+'M' : ''}` : null;
+                    const sdrLabel = sdrHit && sdrRecent ? `${sdrHit.type||'SDR'} ${sdrHit.notional ? (sdrHit.notional/1e6).toFixed(0)+'M' : ''} ${sdrHit.rate ? (sdrHit.rate*100).toFixed(3)+'%' : ''}`.trim() : null;
 
                     // Base = premium heatmap, override with quote state colour
                     let bg = heatBg(viewMode==="premium" ? prem : mid, viewMode==="premium" ? PREM_MIN : VOL_MIN, viewMode==="premium" ? PREM_MAX : VOL_MAX);
@@ -3997,4 +3996,4 @@ export default function App() {
   );
 }
 
-// 1505f
+// 1505g
