@@ -2512,9 +2512,9 @@ export default function App() {
   const [sortDir,    setSortDir]          = useState("desc");
   const [sdrFlash, setSdrFlash] = useState({});
   const [sdrCfCount, setSdrCfCount] = useState({caps:0,floors:0,total:0});
-  const [sdrFilterType,     setSdrFilterType]     = useState("All");
-  const [sdrFilterPlatform, setSdrFilterPlatform] = useState("All");
-  const [sdrFilterAction,   setSdrFilterAction]   = useState("NEWT");
+  const [sdrFilterType,     setSdrFilterType]     = useState([]);
+  const [sdrFilterPlatform, setSdrFilterPlatform] = useState([]);
+  const [sdrFilterAction,   setSdrFilterAction]   = useState([]);
   const [spreadName,   setSpreadName]   = useState("");
   const [spreadTwoWay, setSpreadTwoWay] = useState(false);
   const [spreadLegs,   setSpreadLegs]   = useState([
@@ -2801,9 +2801,9 @@ export default function App() {
           ...newt.filter(r => !["CALL","PUT"].includes(r.option_type_decoded)),
           ...sdrData.filter(r => r.action_type!=="NEWT"),
         ]
-          .filter(r => sdrFilterAction==="All" || r.action_type===sdrFilterAction)
-          .filter(r => sdrFilterType==="All"   || r.option_type_decoded===sdrFilterType)
-          .filter(r => sdrFilterPlatform==="All" || r.platform_identifier===sdrFilterPlatform);
+          .filter(r=>{const a=Array.isArray(sdrFilterAction)?sdrFilterAction:[];return a.length===0||a.includes(r.action_type);})
+          .filter(r=>{const a=Array.isArray(sdrFilterType)?sdrFilterType:[];return a.length===0||a.includes(r.option_type_decoded);})
+          .filter(r=>{const a=Array.isArray(sdrFilterPlatform)?sdrFilterPlatform:[];return a.length===0||a.includes(r.platform_identifier);});
 
         allTrades.forEach(r => {
           const expKey = sdrExpToKey(r.opt_tenor);
@@ -3354,27 +3354,29 @@ export default function App() {
         const PLATFORM_NAMES={"BGCD":"BGC","TWSF":"Tradition","TSEF":"Tradition","TPSE":"Tullett Prebon",
           "IGDL":"ICAP","ISWE":"ICAP (E)","ISWV":"ICAP (V)","GSEF":"GFI","RTSX":"RTX","RTXS":"RTX",
           "TRWB":"Tradeweb","DWSF":"Dealerweb","BLOM":"Bloomberg","ICSE":"ICE","BILT":"Bilateral","XXXX":"Bilateral"};
-        const TYPE_LABELS={"CALL":"Payer","PUT":"Receiver","STR":"Straddle","EC":"Euro Swn",
-          "BCALL":"Berm Payer","NSTD":"Non-std","XCS":"XCCY Swn","OTH":"Other"};
-        const sS={background:"#060a10",border:"1px solid #2a3860",color:"#ff9040",fontSize:8,
-          borderRadius:2,padding:"2px 4px",fontFamily:"inherit",outline:"none"};
+        const TYPE_LABELS={"CALL":"Payer","PUT":"Receiver","STR":"Straddle","EC":"Euro Swn","BCALL":"Berm Payer","NSTD":"Non-std","XCS":"XCCY Swn","OTH":"Other"};
+        const VENUES=[...new Map(Object.entries(PLATFORM_NAMES).map(([k,v])=>[v,k])).entries()].map(([v,k])=>({k,v}));
+        const ACTIONS=["NEWT","MODI","CORR","CANC"];
+        const actArr=Array.isArray(sdrFilterAction)?sdrFilterAction:[];
+        const typArr=Array.isArray(sdrFilterType)?sdrFilterType:[];
+        const venArr=Array.isArray(sdrFilterPlatform)?sdrFilterPlatform:[];
+        const togAct=v=>setSdrFilterAction(p=>{const a=Array.isArray(p)?p:[];return a.includes(v)?a.filter(x=>x!==v):[...a,v];});
+        const togTyp=v=>setSdrFilterType(p=>{const a=Array.isArray(p)?p:[];return a.includes(v)?a.filter(x=>x!==v):[...a,v];});
+        const togVen=v=>setSdrFilterPlatform(p=>{const a=Array.isArray(p)?p:[];return a.includes(v)?a.filter(x=>x!==v):[...a,v];});
+        const tS=(on)=>({fontSize:7,padding:"1px 5px",borderRadius:2,cursor:"pointer",fontFamily:"inherit",
+          border:`1px solid ${on?"rgba(255,140,0,.5)":"#2a3860"}`,
+          background:on?"rgba(255,120,0,.25)":"rgba(20,30,50,.4)",
+          color:on?"#ff9040":"#506070"});
         return (
-          <div style={{padding:"3px 18px",borderBottom:"1px solid #1e3450",display:"flex",gap:6,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
+          <div style={{padding:"4px 18px",borderBottom:"1px solid #1e3450",display:"flex",gap:5,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
             <span style={{fontSize:8,color:"#a05010",letterSpacing:".08em",fontWeight:700,flexShrink:0}}>SDR</span>
-            <select value={sdrFilterAction} onChange={e=>setSdrFilterAction(e.target.value)} style={sS}>
-              {["All","NEWT","MODI","CORR","CANC"].map(o=><option key={o} value={o}>{o}</option>)}
-            </select>
-            <select value={sdrFilterType} onChange={e=>setSdrFilterType(e.target.value)} style={sS}>
-              <option value="All">All Types</option>
-              {Object.entries(TYPE_LABELS).map(([k,v])=><option key={k} value={k}>{v}</option>)}
-            </select>
-            <select value={sdrFilterPlatform} onChange={e=>setSdrFilterPlatform(e.target.value)} style={{...sS,minWidth:100}}>
-              <option value="All">All Venues</option>
-              {Object.entries(PLATFORM_NAMES)
-                .filter(([k],i,a)=>a.findIndex(([k2,v2])=>v2===PLATFORM_NAMES[k])===i)
-                .map(([k,v])=><option key={k} value={k}>{v}</option>)}
-            </select>
-            <span style={{color:"#5a3010",fontSize:7}}>{Object.keys(sdrFlash).length} cells</span>
+            <span style={{color:"#3a6080",fontSize:7}}>ACTION:</span>
+            {ACTIONS.map(a=><button key={a} onClick={()=>togAct(a)} style={tS(actArr.includes(a)||actArr.length===0)}>{a}</button>)}
+            <span style={{color:"#3a6080",fontSize:7,marginLeft:3}}>TYPE:</span>
+            {Object.entries(TYPE_LABELS).map(([k,v])=><button key={k} onClick={()=>togTyp(k)} style={tS(typArr.includes(k)||typArr.length===0)}>{v}</button>)}
+            <span style={{color:"#3a6080",fontSize:7,marginLeft:3}}>VENUE:</span>
+            {VENUES.map(({k,v})=><button key={k} onClick={()=>togVen(k)} style={tS(venArr.includes(k)||venArr.length===0)}>{v}</button>)}
+            <span style={{color:"#5a3010",fontSize:7,marginLeft:4}}>{Object.keys(sdrFlash).length} cells</span>
           </div>
         );
       })()}
@@ -4037,4 +4039,4 @@ export default function App() {
   );
 }
 
-// 1505t
+// 1505u
