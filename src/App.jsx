@@ -2497,6 +2497,7 @@ function sdrTenToKey(s) {
 
 
 function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatform) {
+  const flash = {};
   // Type label mapping: CALL=Payer, PUT=Receiver, STR=Straddle
         const typeLabel = t => ({CALL:"Payer",PUT:"Receiver",STR:"Straddle",STRG:"Strangle",EC:"Euro Swn",BCALL:"Berm Payer",OTH:"Other"}[t]||t||"");
 
@@ -4086,4 +4087,4 @@ export default function App() {
   );
 }
 
-// 1605d
+// 1605e
