@@ -2753,7 +2753,7 @@ export default function App() {
       try {
         // Match pricer exactly: trade_date last 2 days, notional_ccy filter
         const today = new Date();
-        const dateFrom = new Date(today - 2*24*60*60*1000).toISOString().slice(0,10);
+        const dateFrom = new Date(today.getTime() - 2*24*60*60*1000).toISOString().slice(0,10);
         const sdrData = await sbFetch("dtcc_sdr", {
           select: "dissemination_id,event_timestamp,notional_leg1,strike_pct,opt_tenor,swp_tenor,notional_ccy,option_type_decoded,platform_identifier,action_type",
           trade_date: `gte.${dateFrom}`,
@@ -3469,9 +3469,9 @@ export default function App() {
                     let bg = heatBg(viewMode==="premium" ? prem : mid, viewMode==="premium" ? PREM_MIN : VOL_MIN, viewMode==="premium" ? PREM_MAX : VOL_MAX);
                     const _sdr = sdrFlash[k];
                     const _sdrAge = _sdr ? (Date.now() - _sdr.ts) : Infinity;
-                    if (_sdrAge < 30*60*1000)       bg = "rgba(255,140,0,.70)"; // < 30min bright
-                    else if (_sdrAge < 4*60*60*1000) bg = "rgba(200,100,0,.45)"; // < 4hr medium
-                    else if (_sdrAge < 24*60*60*1000) bg = "rgba(140,70,0,.25)"; // < 24hr dim
+                    if (_sdrAge < 30*60*1000)        bg = "rgba(255,160,40,.50)"; // < 30min
+                    else if (_sdrAge < 4*60*60*1000)  bg = "rgba(220,130,20,.32)"; // < 4hr
+                    else if (_sdrAge < 24*60*60*1000) bg = "rgba(180,100,10,.18)"; // < 24hr
                     if(both)        bg = cross?"rgba(20,50,180,.50)":"rgba(40,70,20,.40)";
                     else if(hasBid) bg = "rgba(0,80,30,.35)";
                     else if(hasOff) bg = "rgba(100,45,0,.30)";
@@ -4067,4 +4067,4 @@ export default function App() {
   );
 }
 
-// 1505y
+// 1505z
