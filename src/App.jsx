@@ -2839,7 +2839,6 @@ export default function App() {
         });
         console.log("[SDR]", sdrData?.length, "rows for", activeCcy, "from", dateFrom);
         if (!sdrData?.length) return;
-        const flash = {};
         const flash = buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatform);
         setSdrRawData(sdrData);
         setSdrFlash(flash);
@@ -4087,4 +4086,4 @@ export default function App() {
   );
 }
 
-// 1605c
+// 1605d
