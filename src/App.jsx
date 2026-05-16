@@ -2577,8 +2577,7 @@ export default function App() {
   const [sortDir,    setSortDir]          = useState("desc");
   const [sdrFlash, setSdrFlash] = useState({});
   const [sdrRawData, setSdrRawData] = useState([]);
-  const [sdrPollTick, setSdrPollTick] = useState(0);
-  const refreshSdr = React.useCallback(() => setSdrPollTick(t=>t+1), []);
+  const sdrManualPollRef = React.useRef(null);
   const [sdrCfCount, setSdrCfCount] = useState({caps:0,floors:0,total:0});
   const [sdrFilterType,     setSdrFilterType]     = useState([]);
   const [sdrFilterPlatform, setSdrFilterPlatform] = useState([]);
@@ -2852,10 +2851,11 @@ export default function App() {
         setSdrCfCount({caps:capCount, floors:floorCount, total:cfTrades.length});
       } catch(e) { console.warn("[SDR error]", e); }
     };
+    sdrManualPollRef.current = poll;
     poll();
     const t = setInterval(poll, 60000);
     return () => clearInterval(t);
-  }, [activeCcy, sdrPollTick]);
+  }, [activeCcy]);
   // Auto-reload fresh mids and log when currency tab changes
   const _lastCcy = React.useRef(null);
   useEffect(() => {
@@ -3406,7 +3406,7 @@ export default function App() {
             <span style={{color:"#3a6080",fontSize:7,marginLeft:3}}>VENUE:</span>
             {VENUES.map(({k,v})=><button key={k} onClick={()=>togVen(k)} style={tS(venArr.includes(k)||venArr.length===0)}>{v}</button>)}
             <span style={{color:"#5a3010",fontSize:7,marginLeft:4}}>{Object.keys(sdrFlash).length} cells</span>
-            <button onClick={refreshSdr}
+            <button onClick={()=>{ if(sdrManualPollRef.current) sdrManualPollRef.current(); }}
               style={{fontSize:7,padding:"1px 6px",borderRadius:2,cursor:"pointer",fontFamily:"inherit",
                 border:"1px solid #2a3860",background:"rgba(20,30,50,.6)",color:"#ff9040",marginLeft:4}}>↺ SDR</button>
           </div>
@@ -4087,4 +4087,4 @@ export default function App() {
   );
 }
 
-// 1605b
+// 1605c
