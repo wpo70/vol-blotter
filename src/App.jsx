@@ -2503,7 +2503,7 @@ export default function App() {
   const [editVals, setEditVals]           = useState({ bid:"", offer:"", bidBank:"", offerBank:"" });
   const [activeBankField, setActiveBankField] = useState(null);
   const [bankSuggest, setBankSuggest]     = useState([]);
-  const [log, setLog]                     = useState(() => loadLS(`vbl_log4_${activeCcy}`,[]).map(l=>({...l,ts:new Date(l.ts)})));
+  const [log, setLog]                     = useState(() => loadLS("vbl_log4_AUD",[]).map(l=>({...l,ts:new Date(l.ts)})));
   const [hoveredCell, setHoveredCell]     = useState(null);
   const [filterBank, setFilterBank]       = useState(null);
   const [filterExp,  setFilterExp]        = useState(null);
@@ -4067,4 +4067,4 @@ export default function App() {
   );
 }
 
-// 1505x
+// 1505y
