@@ -2577,8 +2577,8 @@ export default function App() {
   const [sortDir,    setSortDir]          = useState("desc");
   const [sdrFlash, setSdrFlash] = useState({});
   const [sdrRawData, setSdrRawData] = useState([]);
-  const sdrPollFnRef = React.useRef(null);
-  const refreshSdr = React.useCallback(() => { if(sdrPollFnRef.current) sdrPollFnRef.current(); }, []);
+  const [sdrPollTick, setSdrPollTick] = useState(0);
+  const refreshSdr = React.useCallback(() => setSdrPollTick(t=>t+1), []);
   const [sdrCfCount, setSdrCfCount] = useState({caps:0,floors:0,total:0});
   const [sdrFilterType,     setSdrFilterType]     = useState([]);
   const [sdrFilterPlatform, setSdrFilterPlatform] = useState([]);
@@ -2852,11 +2852,10 @@ export default function App() {
         setSdrCfCount({caps:capCount, floors:floorCount, total:cfTrades.length});
       } catch(e) { console.warn("[SDR error]", e); }
     };
-    sdrPollFnRef.current = poll;
     poll();
     const t = setInterval(poll, 60000);
     return () => clearInterval(t);
-  }, [activeCcy]);
+  }, [activeCcy, sdrPollTick]);
   // Auto-reload fresh mids and log when currency tab changes
   const _lastCcy = React.useRef(null);
   useEffect(() => {
@@ -4088,4 +4087,4 @@ export default function App() {
   );
 }
 
-// 1605a
+// 1605b
