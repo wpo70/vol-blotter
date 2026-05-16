@@ -2496,6 +2496,71 @@ function sdrTenToKey(s) {
 }
 
 
+function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatform) {
+  // Type label mapping: CALL=Payer, PUT=Receiver, STR=Straddle
+        const typeLabel = t => ({CALL:"Payer",PUT:"Receiver",STR:"Straddle",STRG:"Strangle",EC:"Euro Swn",BCALL:"Berm Payer",OTH:"Other"}[t]||t||"");
+
+        // Straddle detection: pair CALL+PUT with same tenor/strike within 2 mins
+        const newt = sdrData.filter(r => r.action_type==="NEWT");
+        const payers = newt.filter(r => r.option_type_decoded==="CALL");
+        const rcvrs  = newt.filter(r => r.option_type_decoded==="PUT");
+        const pairedRcvrIds = new Set();
+        const straddles = [];
+        payers.forEach(p => {
+          const sp = Math.round(parseFloat(p.strike_pct||0)*100)/100;
+          const tp = new Date(p.event_timestamp).getTime();
+          // First try straddle (same strike)
+          let match = rcvrs.find(r => {
+            if (pairedRcvrIds.has(r.dissemination_id)) return false;
+            if (r.swp_tenor !== p.swp_tenor || r.opt_tenor !== p.opt_tenor) return false;
+            if (Math.abs(Math.round(parseFloat(r.strike_pct||0)*100)/100 - sp) > 0.01) return false;
+            return Math.abs(new Date(r.event_timestamp).getTime() - tp) <= 120000;
+          });
+          if (match) {
+            pairedRcvrIds.add(match.dissemination_id);
+            straddles.push({...p, _paired:true, option_type_decoded:"STR", _label:"Straddle"});
+            return;
+          }
+          // Then try strangle (different strike, same expiry/tenor, within 2 mins)
+          match = rcvrs.find(r => {
+            if (pairedRcvrIds.has(r.dissemination_id)) return false;
+            if (r.swp_tenor !== p.swp_tenor || r.opt_tenor !== p.opt_tenor) return false;
+            return Math.abs(new Date(r.event_timestamp).getTime() - tp) <= 120000;
+          });
+          if (match) {
+            pairedRcvrIds.add(match.dissemination_id);
+            straddles.push({...p, _paired:true, option_type_decoded:"STRG", _label:"Strangle"});
+          }
+        });
+
+        // Build flash map from all trades
+        const allTrades = [
+          ...straddles,
+          ...newt.filter(r => r.option_type_decoded==="CALL" && !straddles.find(s=>s.dissemination_id===r.dissemination_id)),
+          ...newt.filter(r => r.option_type_decoded==="PUT"  && !pairedRcvrIds.has(r.dissemination_id)),
+          ...newt.filter(r => !["CALL","PUT"].includes(r.option_type_decoded)),
+          ...sdrData.filter(r => r.action_type!=="NEWT"),
+        ]
+          .filter(r=>{const a=Array.isArray(sdrFilterAction)?sdrFilterAction:[];return a.length===0||a.includes(r.action_type);})
+          .filter(r=>{const a=Array.isArray(sdrFilterType)?sdrFilterType:[];return a.length===0||a.includes(r.option_type_decoded);})
+          .filter(r=>{const a=Array.isArray(sdrFilterPlatform)?sdrFilterPlatform:[];return a.length===0||a.includes(r.platform_identifier);});
+
+        allTrades.forEach(r => {
+          const expKey = sdrExpToKey(r.opt_tenor);
+          const tenKey = sdrTenToKey(r.swp_tenor);
+          if (!expKey || !tenKey) return;
+          const k = `${expKey}|${tenKey}`;
+          const ts = new Date(r.event_timestamp).getTime();
+          if (!flash[k] || ts > flash[k].ts) {
+            flash[k] = { notional: r.notional_leg1, rate: r.strike_pct,
+              type: typeLabel(r.option_type_decoded), ts };
+          }
+        });
+        console.log("[SDR flash]", Object.keys(flash));
+  return flash;
+}
+
+
 export default function App() {
   const [quotes, setQuotes]               = useState({});
   const [referred, setReferred]           = useState(new Set());   // Set of "k|side|id" that are referred
@@ -2511,6 +2576,7 @@ export default function App() {
   const [filterMins, setFilterMins]       = useState(null);
   const [sortDir,    setSortDir]          = useState("desc");
   const [sdrFlash, setSdrFlash] = useState({});
+  const [sdrRawData, setSdrRawData] = useState([]);
   const sdrPollFnRef = React.useRef(null);
   const refreshSdr = React.useCallback(() => { if(sdrPollFnRef.current) sdrPollFnRef.current(); }, []);
   const [sdrCfCount, setSdrCfCount] = useState({caps:0,floors:0,total:0});
@@ -2748,6 +2814,13 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem(`vbl_log4_${activeCcy}`, JSON.stringify(log.slice(0,300))); } catch {} }, [log, activeCcy]);
   useEffect(() => { try { localStorage.setItem("vbl_otm2", JSON.stringify(otmQuotes.slice(0,200))); } catch {} }, [otmQuotes]);
   useEffect(() => { try { localStorage.setItem("vbl_spread_log", JSON.stringify(spreadLog.slice(0,100))); } catch {} }, [spreadLog]);
+  // Rebuild SDR flash when filters change
+  useEffect(() => {
+    if (!sdrRawData.length) return;
+    const flash = buildSdrFlash(sdrRawData, sdrFilterAction, sdrFilterType, sdrFilterPlatform);
+    setSdrFlash(flash);
+  }, [sdrFilterAction, sdrFilterType, sdrFilterPlatform, sdrRawData]);
+
   // SDR trade poll
   useEffect(() => {
     if (!SUPABASE_URL || !SUPABASE_ANON) return;
@@ -2768,66 +2841,8 @@ export default function App() {
         console.log("[SDR]", sdrData?.length, "rows for", activeCcy, "from", dateFrom);
         if (!sdrData?.length) return;
         const flash = {};
-        // Type label mapping: CALL=Payer, PUT=Receiver, STR=Straddle
-        const typeLabel = t => ({CALL:"Payer",PUT:"Receiver",STR:"Straddle",STRG:"Strangle",EC:"Euro Swn",BCALL:"Berm Payer",OTH:"Other"}[t]||t||"");
-
-        // Straddle detection: pair CALL+PUT with same tenor/strike within 2 mins
-        const newt = sdrData.filter(r => r.action_type==="NEWT");
-        const payers = newt.filter(r => r.option_type_decoded==="CALL");
-        const rcvrs  = newt.filter(r => r.option_type_decoded==="PUT");
-        const pairedRcvrIds = new Set();
-        const straddles = [];
-        payers.forEach(p => {
-          const sp = Math.round(parseFloat(p.strike_pct||0)*100)/100;
-          const tp = new Date(p.event_timestamp).getTime();
-          // First try straddle (same strike)
-          let match = rcvrs.find(r => {
-            if (pairedRcvrIds.has(r.dissemination_id)) return false;
-            if (r.swp_tenor !== p.swp_tenor || r.opt_tenor !== p.opt_tenor) return false;
-            if (Math.abs(Math.round(parseFloat(r.strike_pct||0)*100)/100 - sp) > 0.01) return false;
-            return Math.abs(new Date(r.event_timestamp).getTime() - tp) <= 120000;
-          });
-          if (match) {
-            pairedRcvrIds.add(match.dissemination_id);
-            straddles.push({...p, _paired:true, option_type_decoded:"STR", _label:"Straddle"});
-            return;
-          }
-          // Then try strangle (different strike, same expiry/tenor, within 2 mins)
-          match = rcvrs.find(r => {
-            if (pairedRcvrIds.has(r.dissemination_id)) return false;
-            if (r.swp_tenor !== p.swp_tenor || r.opt_tenor !== p.opt_tenor) return false;
-            return Math.abs(new Date(r.event_timestamp).getTime() - tp) <= 120000;
-          });
-          if (match) {
-            pairedRcvrIds.add(match.dissemination_id);
-            straddles.push({...p, _paired:true, option_type_decoded:"STRG", _label:"Strangle"});
-          }
-        });
-
-        // Build flash map from all trades
-        const allTrades = [
-          ...straddles,
-          ...newt.filter(r => r.option_type_decoded==="CALL" && !straddles.find(s=>s.dissemination_id===r.dissemination_id)),
-          ...newt.filter(r => r.option_type_decoded==="PUT"  && !pairedRcvrIds.has(r.dissemination_id)),
-          ...newt.filter(r => !["CALL","PUT"].includes(r.option_type_decoded)),
-          ...sdrData.filter(r => r.action_type!=="NEWT"),
-        ]
-          .filter(r=>{const a=Array.isArray(sdrFilterAction)?sdrFilterAction:[];return a.length===0||a.includes(r.action_type);})
-          .filter(r=>{const a=Array.isArray(sdrFilterType)?sdrFilterType:[];return a.length===0||a.includes(r.option_type_decoded);})
-          .filter(r=>{const a=Array.isArray(sdrFilterPlatform)?sdrFilterPlatform:[];return a.length===0||a.includes(r.platform_identifier);});
-
-        allTrades.forEach(r => {
-          const expKey = sdrExpToKey(r.opt_tenor);
-          const tenKey = sdrTenToKey(r.swp_tenor);
-          if (!expKey || !tenKey) return;
-          const k = `${expKey}|${tenKey}`;
-          const ts = new Date(r.event_timestamp).getTime();
-          if (!flash[k] || ts > flash[k].ts) {
-            flash[k] = { notional: r.notional_leg1, rate: r.strike_pct,
-              type: typeLabel(r.option_type_decoded), ts };
-          }
-        });
-        console.log("[SDR flash]", Object.keys(flash));
+        const flash = buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatform);
+        setSdrRawData(sdrData);
         setSdrFlash(flash);
 
         // Caps & floors: CALL/PUT with null swp_tenor
@@ -4073,4 +4088,4 @@ export default function App() {
   );
 }
 
-// 1505z1
+// 1605a
