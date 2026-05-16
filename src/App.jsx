@@ -2503,7 +2503,7 @@ export default function App() {
   const [editVals, setEditVals]           = useState({ bid:"", offer:"", bidBank:"", offerBank:"" });
   const [activeBankField, setActiveBankField] = useState(null);
   const [bankSuggest, setBankSuggest]     = useState([]);
-  const [log, setLog]                     = useState(() => loadLS("vbl_log4",[]).map(l=>({...l,ts:new Date(l.ts)})));
+  const [log, setLog]                     = useState(() => loadLS(`vbl_log4_${activeCcy}`,[]).map(l=>({...l,ts:new Date(l.ts)})));
   const [hoveredCell, setHoveredCell]     = useState(null);
   const [filterBank, setFilterBank]       = useState(null);
   const [filterExp,  setFilterExp]        = useState(null);
@@ -2743,7 +2743,7 @@ export default function App() {
   const [PREM_MIN, PREM_MAX] = CCY_PREM_RANGE[activeCcy] || [6,1700];
   const [ccyStore, setCcyStore] = useState({AUD:{quotes:{},log:[],referred:new Set()},USD:{quotes:{},log:[],referred:new Set()},EUR:{quotes:{},log:[],referred:new Set()},JPY:{quotes:{},log:[],referred:new Set()}});
 
-  useEffect(() => { try { localStorage.setItem("vbl_log4", JSON.stringify(log.slice(0,300))); } catch {} }, [log]);
+  useEffect(() => { try { localStorage.setItem(`vbl_log4_${activeCcy}`, JSON.stringify(log.slice(0,300))); } catch {} }, [log, activeCcy]);
   useEffect(() => { try { localStorage.setItem("vbl_otm2", JSON.stringify(otmQuotes.slice(0,200))); } catch {} }, [otmQuotes]);
   useEffect(() => { try { localStorage.setItem("vbl_spread_log", JSON.stringify(spreadLog.slice(0,100))); } catch {} }, [spreadLog]);
   // SDR trade poll
@@ -2839,12 +2839,15 @@ export default function App() {
     const t = setInterval(poll, 60000);
     return () => clearInterval(t);
   }, [activeCcy]);
-  // Auto-reload fresh mids when currency tab changes
+  // Auto-reload fresh mids and log when currency tab changes
   const _lastCcy = React.useRef(null);
   useEffect(() => {
-    if (SUPABASE_URL && SUPABASE_ANON && activeCcy !== _lastCcy.current) {
+    if (activeCcy !== _lastCcy.current) {
       _lastCcy.current = activeCcy;
-      loadFreshMids();
+      // Reload log for this currency
+      const saved = loadLS(`vbl_log4_${activeCcy}`,[]).map(l=>({...l,ts:new Date(l.ts)}));
+      setLog(saved);
+      if (SUPABASE_URL && SUPABASE_ANON) loadFreshMids();
     }
   }, [activeCcy]);
   useEffect(() => { if (activeCell && bidRef.current) bidRef.current.focus(); }, [activeCell]);
@@ -4064,4 +4067,4 @@ export default function App() {
   );
 }
 
-// 1505w
+// 1505x
