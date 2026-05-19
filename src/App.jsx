@@ -2849,8 +2849,9 @@ export default function App() {
           notional_ccy: `eq.${activeCcy}`,
           opt_tenor: "not.is.null",
           swp_tenor: "not.is.null",
+          action_type: "eq.NEWT",
           order: "event_timestamp.desc",
-          limit: "2000",
+          limit: "5000",
         });
         console.log("[SDR] raw rows:", sdrData?.length, "for", activeCcy);
         if(sdrData?.length) {
@@ -4085,4 +4086,4 @@ export default function App() {
   );
 }
 
-// 1905g
+// 2005a
