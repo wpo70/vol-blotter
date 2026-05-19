@@ -2605,6 +2605,7 @@ export default function App() {
   const [filterMins, setFilterMins]       = useState(null);
   const [sortDir,    setSortDir]          = useState("desc");
   const [sdrFlash, setSdrFlash] = useState({});
+  const sdrFlashRef = React.useRef({});
   const [sdrHover, setSdrHover] = useState(null);
   const [sdrRawData, setSdrRawData] = useState([]);
   const sdrManualPollRef = React.useRef(null);
@@ -2847,6 +2848,7 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem("vbl_sdr_type",   JSON.stringify(sdrFilterType));     } catch {} }, [sdrFilterType]);
   useEffect(() => { try { localStorage.setItem("vbl_sdr_venue",  JSON.stringify(sdrFilterPlatform)); } catch {} }, [sdrFilterPlatform]);
   useEffect(() => { try { localStorage.setItem("vbl_sdr_action", JSON.stringify(sdrFilterAction));   } catch {} }, [sdrFilterAction]);
+  useEffect(() => { sdrFlashRef.current = sdrFlash; }, [sdrFlash]);
   // Rebuild SDR flash when filters change
   useEffect(() => {
     if (!sdrRawData.length) return;
@@ -3605,7 +3607,7 @@ export default function App() {
                             </div>
                           </div>
                         ) : (
-                          <div onMouseEnter={e=>{const _s=sdrFlash[k];if(_s&&Date.now()-_s.ts<86400000)setSdrHover({sdr:_s,x:e.clientX,y:e.clientY});}} style={{display:"flex",flexDirection:"column",padding:"2px 3px",gap:0,minHeight:22}}>
+                          <div onMouseEnter={e=>{const _s=sdrFlashRef.current[k];if(_s&&Date.now()-_s.ts<86400000)setSdrHover({sdr:_s,x:e.clientX,y:e.clientY});}} style={{display:"flex",flexDirection:"column",padding:"2px 3px",gap:0,minHeight:22}}>
                             {isHov && <div style={{textAlign:"center",color:"#3a80b8",fontSize:7,marginBottom:1}}>fwd {FWD[exp]?.[ti]?.toFixed(3)??"--"}%</div>}
                             <div style={{textAlign:"center",color:(hasBid||hasOff)?"#508090":"#68a0ba",fontSize:(hasBid||hasOff)?8:11,fontWeight:(hasBid||hasOff)?400:500,opacity:(hasBid||hasOff)?.45:1,marginBottom:(hasBid||hasOff)?1:0}}>
                               {dispMid ?? "--"}
@@ -4111,4 +4113,4 @@ export default function App() {
   );
 }
 
-// 2005n
+// 2005p
