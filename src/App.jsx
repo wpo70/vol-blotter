@@ -2568,7 +2568,7 @@ function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatfor
           const ts = new Date(r.event_timestamp).getTime();
           if (!flash[k] || ts > flash[k].ts) {
             flash[k] = { notional: r.notional_leg1, rate: r.strike_pct,
-              prem: r.premium_leg1, venue: r.platform_identifier,
+              venue: r.platform_identifier,
               type: typeLabel(r.option_type_decoded), ts };
           }
         });
@@ -2857,7 +2857,7 @@ export default function App() {
         const today = new Date();
         const dateFrom = new Date(today.getTime() - 1*24*60*60*1000).toISOString().slice(0,10);
         const sdrData = await sbFetch("dtcc_sdr", {
-          select: "dissemination_id,event_timestamp,notional_leg1,premium_leg1,strike_pct,opt_tenor,swp_tenor,notional_ccy,option_type_decoded,platform_identifier,action_type",
+          select: "dissemination_id,event_timestamp,notional_leg1,strike_pct,opt_tenor,swp_tenor,notional_ccy,option_type_decoded,platform_identifier,action_type",
           trade_date: `gte.${dateFrom}`,
           notional_ccy: `eq.${activeCcy}`,
           opt_tenor: "not.is.null",
@@ -4098,4 +4098,4 @@ export default function App() {
   );
 }
 
-// 2005g
+// 2005h
