@@ -3563,7 +3563,7 @@ export default function App() {
                       <td key={ten} className="hv"
                         onClick={()=>!isActive && openCell(exp,ten)}
                         onMouseEnter={e=>{setHoveredCell(k);if(_hasSdr)setSdrHover({k,sdr:_sdr,x:e.clientX,y:e.clientY});}}
-                        onMouseLeave={()=>{setHoveredCell(null);setSdrHover(null);}
+                        onMouseLeave={()=>{setHoveredCell(null);setSdrHover(null);}}
                         style={{background:bg,border:`1px solid ${bdr}`,padding:"2px 2px",position:"relative",transition:"background .1s",cursor:"pointer",minWidth:88,verticalAlign:"top"}}>
 
                         {isActive ? (
@@ -4116,4 +4116,4 @@ export default function App() {
   );
 }
 
-// 2005d
+// 2005e
