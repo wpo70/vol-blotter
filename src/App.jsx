@@ -2321,18 +2321,12 @@ function CfOtmStrikePanel({ cfQuotes, cfRef, ccy, visStrikes, otmView, setOtmVie
         const PN={"BGCD":"BGC","TWSF":"Tradition","TSEF":"Tradition","TPSE":"Tullett Prebon","IGDL":"ICAP","ISWE":"ICAP (E)","ISWV":"ICAP (V)","GSEF":"GFI","DWSF":"Dealerweb","ICSE":"ICE","BILT":"Bilateral","XXXX":"Bilateral"};
         return <div style={{position:"fixed",left:Math.min(x+12,window.innerWidth-180),top:Math.max(y-10,10),zIndex:9999,background:"rgba(8,12,24,.97)",border:"1px solid rgba(255,140,0,.5)",borderRadius:4,padding:"8px 12px",pointerEvents:"none",minWidth:150}}>
           <div style={{color:"#ff9040",fontSize:9,fontWeight:700,marginBottom:5}}>{sdr.type}</div>
-          {[["Notional",sdr.notional?(+sdr.notional/1e6).toFixed(0)+"M":"—"],
-            ["Strike",sdr.rate?(+sdr.rate*100).toFixed(3)+"%":"—"],
-            ["Premium",sdr.prem?(+sdr.prem).toFixed(2)+"bp":"—"],
-            ["Venue",PN[sdr.venue]||sdr.venue||"—"],
-            ["Age",Math.round((Date.now()-sdr.ts)/60000)+"m ago"]
-          ].map(([l,v])=><div key={l} style={{display:"flex",justifyContent:"space-between",gap:12,fontSize:8,marginBottom:2}}>
-            <span style={{color:"#5a6080"}}>{l}</span>
-            <span style={{color:l==="Premium"?"#60d0a0":"#c0c8d0"}}>{v}</span>
-          </div>)}
+          {[["Notional",sdr.notional?(+sdr.notional/1e6).toFixed(0)+"M":"—"],["Strike",sdr.rate?(+sdr.rate*100).toFixed(3)+"%":"—"],["Premium",sdr.prem?(+sdr.prem).toFixed(2)+"bp":"—"],["Venue",PN[sdr.venue]||sdr.venue||"—"],["Age",Math.round((Date.now()-sdr.ts)/60000)+"m ago"]].map(([l,v])=>(
+            <div key={l} style={{display:"flex",justifyContent:"space-between",gap:12,fontSize:8,marginBottom:2}}>
+              <span style={{color:"#5a6080"}}>{l}</span><span style={{color:l==="Premium"?"#60d0a0":"#c0c8d0"}}>{v}</span>
+            </div>))}
         </div>;
       })()}
-
       <div style={{padding:"5px 10px",borderTop:"1px solid #1e3450",fontSize:8,color:"#1e3048",letterSpacing:".07em",flexShrink:0}}>OTM · INDICATIVE ONLY</div>
     </div>
   );
@@ -3550,7 +3544,7 @@ export default function App() {
                     return (
                       <td key={ten} className="hv"
                         onClick={()=>!isActive && openCell(exp,ten)}
-                        onMouseEnter={e=>{setHoveredCell(k);const s=sdrFlash[cellKey(exp.toLowerCase(),ten)];if(s&&(Date.now()-s.ts)<86400000)setSdrHover({sdr:s,x:e.clientX,y:e.clientY});}}
+                        onMouseEnter={e=>{setHoveredCell(k);const _s=sdrFlash[k];if(_s&&Date.now()-_s.ts<86400000)setSdrHover({sdr:_s,x:e.clientX,y:e.clientY});}}
                         onMouseLeave={()=>{setHoveredCell(null);setSdrHover(null);}}
                         style={{background:bg,border:`1px solid ${bdr}`,padding:"2px 2px",position:"relative",transition:"background .1s",cursor:"pointer",minWidth:88,verticalAlign:"top"}}>
 
@@ -4104,4 +4098,4 @@ export default function App() {
   );
 }
 
-// 2005f
+// 2005g
