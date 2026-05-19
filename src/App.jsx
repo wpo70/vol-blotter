@@ -2498,6 +2498,12 @@ function sdrTenToKey(s) {
 
 function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatform) {
   const flash = {};
+  const ALL_ACTIONS = ["NEWT","MODI","CORR","CANC"];
+  const ALL_TYPES = ["CALL","PUT","STR","STRG","EC","BCALL","NSTD","XCS","OTH"];
+  // Treat full selection same as empty (show all)
+  const actF = Array.isArray(sdrFilterAction) && sdrFilterAction.length > 0 && sdrFilterAction.length < ALL_ACTIONS.length ? sdrFilterAction : [];
+  const typF = Array.isArray(sdrFilterType) && sdrFilterType.length > 0 && sdrFilterType.length < ALL_TYPES.length ? sdrFilterType : [];
+  const venF = Array.isArray(sdrFilterPlatform) && sdrFilterPlatform.length > 0 ? sdrFilterPlatform : [];
   // Type label mapping: CALL=Payer, PUT=Receiver, STR=Straddle
         const typeLabel = t => ({CALL:"Payer",PUT:"Receiver",STR:"Straddle",STRG:"Strangle",EC:"Euro Swn",BCALL:"Berm Payer",OTH:"Other"}[t]||t||"");
 
@@ -2542,9 +2548,9 @@ function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatfor
           ...newt.filter(r => !["CALL","PUT"].includes(r.option_type_decoded)),
           ...sdrData.filter(r => r.action_type!=="NEWT"),
         ]
-          .filter(r=>{const a=Array.isArray(sdrFilterAction)?sdrFilterAction:[];return a.length===0||a.includes(r.action_type);})
-          .filter(r=>{const a=Array.isArray(sdrFilterType)?sdrFilterType:[];return a.length===0||a.includes(r.option_type_decoded);})
-          .filter(r=>{const a=Array.isArray(sdrFilterPlatform)?sdrFilterPlatform:[];return a.length===0||a.includes(r.platform_identifier);});
+          .filter(r=>actF.length===0||actF.includes(r.action_type))
+          .filter(r=>typF.length===0||typF.includes(r.option_type_decoded))
+          .filter(r=>venF.length===0||venF.includes(r.platform_identifier));
 
         allTrades.forEach(r => {
           const expKey = sdrExpToKey(r.opt_tenor);
@@ -2563,7 +2569,7 @@ function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatfor
 
 
 export default function App() {
-  const [quotes, setQuotes]               = useState({});
+  const [quotes, setQuotes]               = useState(() => loadLS("vbl_quotes_AUD",{}));
   const [referred, setReferred]           = useState(new Set());   // Set of "k|side|id" that are referred
   const [activeCell, setActiveCell]       = useState(null);
   const [editVals, setEditVals]           = useState({ bid:"", offer:"", bidBank:"", offerBank:"" });
@@ -2812,6 +2818,7 @@ export default function App() {
   const [ccyStore, setCcyStore] = useState({AUD:{quotes:{},log:[],referred:new Set()},USD:{quotes:{},log:[],referred:new Set()},EUR:{quotes:{},log:[],referred:new Set()},JPY:{quotes:{},log:[],referred:new Set()}});
 
   useEffect(() => { try { localStorage.setItem(`vbl_log4_${activeCcy}`, JSON.stringify(log.slice(0,300))); } catch {} }, [log, activeCcy]);
+  useEffect(() => { try { localStorage.setItem(`vbl_quotes_${activeCcy}`, JSON.stringify(quotes)); } catch {} }, [quotes, activeCcy]);
   useEffect(() => { try { localStorage.setItem("vbl_otm2", JSON.stringify(otmQuotes.slice(0,200))); } catch {} }, [otmQuotes]);
   useEffect(() => { try { localStorage.setItem("vbl_spread_log", JSON.stringify(spreadLog.slice(0,100))); } catch {} }, [spreadLog]);
   // Rebuild SDR flash when filters change
@@ -2961,16 +2968,20 @@ export default function App() {
 
   const switchCcy = (ccy) => {
     if (ccy === activeCcy) return;
-    // save current ccy state
+    // save current ccy state to memory + localStorage
     setCcyStore(prev => ({
       ...prev,
       [activeCcy]: { quotes, log, referred }
     }));
-    // load new ccy state
-    const next = ccyStore[ccy] || {quotes:{},log:[],referred:new Set()};
-    setQuotes(next.quotes);
-    setLog(next.log);
-    setReferred(next.referred);
+    try { localStorage.setItem(`vbl_log4_${activeCcy}`, JSON.stringify(log.slice(0,300))); } catch {}
+    try { localStorage.setItem(`vbl_quotes_${activeCcy}`, JSON.stringify(quotes)); } catch {}
+    // load new ccy state - from memory first, then localStorage
+    const stored = ccyStore[ccy];
+    const savedLog = stored?.log?.length ? stored.log : (loadLS(`vbl_log4_${ccy}`,[]).map(l=>({...l,ts:new Date(l.ts)})));
+    const savedQuotes = stored?.quotes && Object.keys(stored.quotes).length ? stored.quotes : (loadLS(`vbl_quotes_${ccy}`,{}));
+    setQuotes(savedQuotes);
+    setLog(savedLog);
+    setReferred(stored?.referred || new Set());
     setActiveCcy(ccy);
     setActiveCell(null);
     setFilterBank(null);
@@ -4088,4 +4099,4 @@ export default function App() {
   );
 }
 
-// 1605f
+// 1605i
