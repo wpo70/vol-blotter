@@ -3841,7 +3841,16 @@ export default function App() {
                   border:`1px solid ${spreadTwoWay?"#808020":"#2a3860"}`,
                   background:spreadTwoWay?"rgba(180,180,0,.2)":"rgba(20,30,50,.4)",
                   color:spreadTwoWay?"#c0c040":"#5a6080",fontWeight:700}}>2-WAY</button>
-              <button onClick={()=>{setSpreadResult(null);setSpreadImplied({});setSpreadTwoWay(false);}}
+              <button onClick={()=>{
+                  setSpreadResult(null);
+                  setSpreadImplied({});
+                  setSpreadTwoWay(false);
+                  setSpreadName("");
+                  setSpreadLegs([
+                    {exp:"1y",ten:"1Y",spreadPx:"",ratio:"8",side:"bid",bank:""},
+                    {exp:"1y",ten:"10Y",spreadPx:"",ratio:"1",side:"offer",bank:""}
+                  ]);
+                }}
                 style={{fontSize:7,padding:"1px 5px",borderRadius:2,cursor:"pointer",fontFamily:"inherit",
                   border:"1px solid #3a1a1a",background:"rgba(60,20,20,.4)",color:"#a04040"}}>CLR</button>
               {spreadLegs.length<3&&<button onClick={()=>setSpreadLegs(p=>[...p,{exp:"1y",ten:"1Y",spreadPx:"",ratio:"1",side:"bid",bank:""}])}
@@ -4059,4 +4068,4 @@ export default function App() {
   );
 }
 
-// 1905a
+// 1905b
