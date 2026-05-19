@@ -2407,6 +2407,34 @@ function CfLogPanel({ cfLog, setCfLog, displayCfLog, cfBankCounts, cfFiltBank, s
           ))
         }
       </div>
+      {/* SDR Hover Tooltip */}
+      {sdrHover&&(()=>{
+        const {sdr,x,y} = sdrHover;
+        const PLATFORM_NAMES={"BGCD":"BGC","TWSF":"Tradition","TSEF":"Tradition","TPSE":"Tullett Prebon",
+          "IGDL":"ICAP","ISWE":"ICAP (E)","ISWV":"ICAP (V)","GSEF":"GFI",
+          "DWSF":"Dealerweb","ICSE":"ICE","BILT":"Bilateral","XXXX":"Bilateral"};
+        const venue = PLATFORM_NAMES[sdr.venue]||sdr.venue||"";
+        const notional = sdr.notional ? `${(+sdr.notional/1e6).toFixed(0)}M` : "";
+        const prem = sdr.prem ? `${(+sdr.prem).toFixed(2)}bp` : "—";
+        const strike = sdr.rate ? `${(+sdr.rate*100).toFixed(3)}%` : "—";
+        const age = Math.round((Date.now()-sdr.ts)/60000);
+        return (
+          <div style={{position:"fixed",left:x+12,top:y-10,zIndex:9999,
+            background:"rgba(8,12,24,.97)",border:"1px solid rgba(255,140,0,.5)",
+            borderRadius:4,padding:"8px 12px",pointerEvents:"none",minWidth:140}}>
+            <div style={{color:"#ff9040",fontSize:9,fontWeight:700,marginBottom:4}}>{sdr.type}</div>
+            <div style={{display:"grid",gridTemplateColumns:"auto auto",gap:"2px 10px",fontSize:8}}>
+              <span style={{color:"#5a6080"}}>Notional</span><span style={{color:"#c0c8d0"}}>{notional}</span>
+              <span style={{color:"#5a6080"}}>Strike</span><span style={{color:"#c0c8d0"}}>{strike}</span>
+              <span style={{color:"#5a6080"}}>Premium</span><span style={{color:"#60d0a0"}}>{prem}</span>
+              <span style={{color:"#5a6080"}}>Venue</span><span style={{color:"#c0c8d0"}}>{venue}</span>
+              <span style={{color:"#5a6080"}}>Age</span><span style={{color:"#5a6080"}}>{age}m ago</span>
+            </div>
+          </div>
+        );
+      })()}
+
+
       <div style={{padding:"6px 10px",borderTop:"1px solid #1e3450",fontSize:8,color:"#1e3048",letterSpacing:".07em",flexShrink:0}}>CF · INDICATIVE ONLY</div>
     </div>
   );
@@ -2557,7 +2585,8 @@ function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatfor
           const ts = new Date(r.event_timestamp).getTime();
           if (!flash[k] || ts > flash[k].ts) {
             flash[k] = { notional: r.notional_leg1, rate: r.strike_pct,
-              type: typeLabel(r.option_type_decoded), ts };
+              prem: r.premium_leg1, type: typeLabel(r.option_type_decoded),
+              venue: r.platform_identifier, ts };
           }
         });
         console.log("[SDR flash]", Object.keys(flash));
@@ -2587,6 +2616,7 @@ export default function App() {
   const [filterMins, setFilterMins]       = useState(null);
   const [sortDir,    setSortDir]          = useState("desc");
   const [sdrFlash, setSdrFlash] = useState({});
+  const [sdrHover, setSdrHover] = useState(null); // {k, x, y}
   const [sdrRawData, setSdrRawData] = useState([]);
   const sdrManualPollRef = React.useRef(null);
   const [sdrCfCount, setSdrCfCount] = useState({caps:0,floors:0,total:0});
@@ -2844,12 +2874,11 @@ export default function App() {
         const today = new Date();
         const dateFrom = new Date(today.getTime() - 1*24*60*60*1000).toISOString().slice(0,10);
         const sdrData = await sbFetch("dtcc_sdr", {
-          select: "dissemination_id,event_timestamp,notional_leg1,strike_pct,opt_tenor,swp_tenor,notional_ccy,option_type_decoded,platform_identifier,action_type",
+          select: "dissemination_id,event_timestamp,notional_leg1,premium_leg1,strike_pct,opt_tenor,swp_tenor,notional_ccy,option_type_decoded,platform_identifier,action_type",
           trade_date: `gte.${dateFrom}`,
           notional_ccy: `eq.${activeCcy}`,
           opt_tenor: "not.is.null",
           swp_tenor: "not.is.null",
-          action_type: "eq.NEWT",
           order: "event_timestamp.desc",
           limit: "5000",
         });
@@ -3517,6 +3546,7 @@ export default function App() {
                     // Base = premium heatmap, override with quote state colour
                     let bg = heatBg(viewMode==="premium" ? prem : mid, viewMode==="premium" ? PREM_MIN : VOL_MIN, viewMode==="premium" ? PREM_MAX : VOL_MAX);
                     const _sdr = sdrFlash[k];
+                    const _hasSdr = _sdr && (Date.now()-_sdr.ts)<24*60*60*1000;
                     const _sdrAge = _sdr ? (Date.now() - _sdr.ts) : Infinity;
                     if (_sdrAge < 30*60*1000)        bg = "rgba(255,160,40,.50)"; // < 30min
                     else if (_sdrAge < 4*60*60*1000)  bg = "rgba(220,130,20,.32)"; // < 4hr
@@ -3532,8 +3562,8 @@ export default function App() {
                     return (
                       <td key={ten} className="hv"
                         onClick={()=>!isActive && openCell(exp,ten)}
-                        onMouseEnter={()=>setHoveredCell(k)}
-                        onMouseLeave={()=>setHoveredCell(null)}
+                        onMouseEnter={e=>{setHoveredCell(k);if(_hasSdr)setSdrHover({k,sdr:_sdr,x:e.clientX,y:e.clientY});}}
+                        onMouseLeave={()=>{setHoveredCell(null);setSdrHover(null);}
                         style={{background:bg,border:`1px solid ${bdr}`,padding:"2px 2px",position:"relative",transition:"background .1s",cursor:"pointer",minWidth:88,verticalAlign:"top"}}>
 
                         {isActive ? (
@@ -4086,4 +4116,4 @@ export default function App() {
   );
 }
 
-// 2005a
+// 2005d
