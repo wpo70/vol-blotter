@@ -2498,12 +2498,9 @@ function sdrTenToKey(s) {
 
 function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatform) {
   const flash = {};
-  const ALL_ACTIONS = ["NEWT","MODI","CORR","CANC"];
-  const ALL_TYPES = ["CALL","PUT","STR","STRG","EC","BCALL","NSTD","XCS","OTH"];
-  // Treat full selection same as empty (show all)
-  const actF = Array.isArray(sdrFilterAction) && sdrFilterAction.length > 0 && sdrFilterAction.length < ALL_ACTIONS.length ? sdrFilterAction : [];
-  const typF = Array.isArray(sdrFilterType) && sdrFilterType.length > 0 && sdrFilterType.length < ALL_TYPES.length ? sdrFilterType : [];
-  const venF = Array.isArray(sdrFilterPlatform) && sdrFilterPlatform.length > 0 ? sdrFilterPlatform : [];
+  const actF = Array.isArray(sdrFilterAction)  ? sdrFilterAction  : [];
+  const typF = Array.isArray(sdrFilterType)    ? sdrFilterType    : [];
+  const venF = Array.isArray(sdrFilterPlatform)? sdrFilterPlatform: [];
   // Type label mapping: CALL=Payer, PUT=Receiver, STR=Straddle
         const typeLabel = t => ({CALL:"Payer",PUT:"Receiver",STR:"Straddle",STRG:"Strangle",EC:"Euro Swn",BCALL:"Berm Payer",OTH:"Other"}[t]||t||"");
 
@@ -2586,8 +2583,8 @@ export default function App() {
   const [sdrRawData, setSdrRawData] = useState([]);
   const sdrManualPollRef = React.useRef(null);
   const [sdrCfCount, setSdrCfCount] = useState({caps:0,floors:0,total:0});
-  const [sdrFilterType,     setSdrFilterType]     = useState([]);
-  const [sdrFilterPlatform, setSdrFilterPlatform] = useState([]);
+  const [sdrFilterType,     setSdrFilterType]     = useState(()=>loadLS("vbl_sdr_type",[]));
+  const [sdrFilterPlatform, setSdrFilterPlatform] = useState(()=>loadLS("vbl_sdr_venue",[]));
   const [sdrFilterAction,   setSdrFilterAction]   = useState([]);
   const [spreadName,   setSpreadName]   = useState("");
   const [spreadTwoWay, setSpreadTwoWay] = useState(false);
@@ -2821,6 +2818,9 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem(`vbl_quotes_${activeCcy}`, JSON.stringify(quotes)); } catch {} }, [quotes, activeCcy]);
   useEffect(() => { try { localStorage.setItem("vbl_otm2", JSON.stringify(otmQuotes.slice(0,200))); } catch {} }, [otmQuotes]);
   useEffect(() => { try { localStorage.setItem("vbl_spread_log", JSON.stringify(spreadLog.slice(0,100))); } catch {} }, [spreadLog]);
+  useEffect(() => { try { localStorage.setItem("vbl_sdr_type",   JSON.stringify(sdrFilterType));     } catch {} }, [sdrFilterType]);
+  useEffect(() => { try { localStorage.setItem("vbl_sdr_venue",  JSON.stringify(sdrFilterPlatform)); } catch {} }, [sdrFilterPlatform]);
+  useEffect(() => { try { localStorage.setItem("vbl_sdr_action", JSON.stringify(sdrFilterAction));   } catch {} }, [sdrFilterAction]);
   // Rebuild SDR flash when filters change
   useEffect(() => {
     if (!sdrRawData.length) return;
@@ -4059,4 +4059,4 @@ export default function App() {
   );
 }
 
-// 1605j
+// 1905a
