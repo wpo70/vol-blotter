@@ -2845,7 +2845,17 @@ export default function App() {
           order: "event_timestamp.desc",
           limit: "500",
         });
-        console.log("[SDR]", sdrData?.length, "rows for", activeCcy, "from", dateFrom);
+        console.log("[SDR] raw rows:", sdrData?.length, "for", activeCcy);
+        if(sdrData?.length) {
+          const types = [...new Set(sdrData.map(r=>r.option_type_decoded))];
+          const venues = [...new Set(sdrData.map(r=>r.platform_identifier))];
+          const expiries = [...new Set(sdrData.map(r=>r.opt_tenor))];
+          const tenors = [...new Set(sdrData.map(r=>r.swp_tenor))];
+          console.log("[SDR] types:", types);
+          console.log("[SDR] venues:", venues);
+          console.log("[SDR] opt_tenors:", expiries);
+          console.log("[SDR] swp_tenors:", tenors);
+        }
         if (!sdrData?.length) return;
         const flash = buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatform);
         setSdrRawData(sdrData);
@@ -4068,4 +4078,4 @@ export default function App() {
   );
 }
 
-// 1905b
+// 1905d
