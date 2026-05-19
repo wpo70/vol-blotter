@@ -2862,15 +2862,22 @@ export default function App() {
         // Match pricer exactly: trade_date last 2 days, notional_ccy filter
         const today = new Date();
         const dateFrom = new Date(today.getTime() - 1*24*60*60*1000).toISOString().slice(0,10);
-        const sdrData = await sbFetch("dtcc_sdr", {
+        // Paginate to overcome Supabase 1000 row limit
+        const sdrParams = {
           select: "dissemination_id,event_timestamp,notional_leg1,premium_amount,strike_pct,opt_tenor,swp_tenor,notional_ccy,option_type_decoded,platform_identifier,action_type",
           trade_date: `gte.${dateFrom}`,
           notional_ccy: `eq.${activeCcy}`,
           opt_tenor: "not.is.null",
           swp_tenor: "not.is.null",
           order: "event_timestamp.desc",
-          limit: "5000",
-        });
+          limit: "1000",
+        };
+        const [page1, page2, page3] = await Promise.all([
+          sbFetch("dtcc_sdr", {...sdrParams, offset: "0"}),
+          sbFetch("dtcc_sdr", {...sdrParams, offset: "1000"}),
+          sbFetch("dtcc_sdr", {...sdrParams, offset: "2000"}),
+        ]);
+        const sdrData = [...(page1||[]), ...(page2||[]), ...(page3||[])];
         console.log("[SDR] raw rows:", sdrData?.length, "for", activeCcy);
         if(sdrData?.length) {
           const types = [...new Set(sdrData.map(r=>r.option_type_decoded))];
@@ -3550,7 +3557,7 @@ export default function App() {
                     return (
                       <td key={ten} className="hv"
                         onClick={()=>!isActive && openCell(exp,ten)}
-                        onMouseEnter={e=>{const _s=sdrFlash[k];console.log("[SDR hover]",k,_s);if(_s&&Date.now()-_s.ts<86400000){setSdrHover({sdr:_s,x:e.clientX,y:e.clientY});}else{setHoveredCell(k);}}}
+                        onMouseEnter={()=>setHoveredCell(k)}
                         onMouseLeave={()=>{setHoveredCell(null);setSdrHover(null);}}
                         style={{background:bg,border:`1px solid ${bdr}`,padding:"2px 2px",position:"relative",transition:"background .1s",cursor:"pointer",minWidth:88,verticalAlign:"top"}}>
 
@@ -3598,7 +3605,7 @@ export default function App() {
                             </div>
                           </div>
                         ) : (
-                          <div style={{display:"flex",flexDirection:"column",padding:"2px 3px",gap:0,minHeight:22}}>
+                          <div onMouseEnter={e=>{const _s=sdrFlash[k];if(_s&&Date.now()-_s.ts<86400000)setSdrHover({sdr:_s,x:e.clientX,y:e.clientY});}} style={{display:"flex",flexDirection:"column",padding:"2px 3px",gap:0,minHeight:22}}>
                             {isHov && <div style={{textAlign:"center",color:"#3a80b8",fontSize:7,marginBottom:1}}>fwd {FWD[exp]?.[ti]?.toFixed(3)??"--"}%</div>}
                             <div style={{textAlign:"center",color:(hasBid||hasOff)?"#508090":"#68a0ba",fontSize:(hasBid||hasOff)?8:11,fontWeight:(hasBid||hasOff)?400:500,opacity:(hasBid||hasOff)?.45:1,marginBottom:(hasBid||hasOff)?1:0}}>
                               {dispMid ?? "--"}
@@ -4104,4 +4111,4 @@ export default function App() {
   );
 }
 
-// 2005l
+// 2005n
