@@ -2842,15 +2842,15 @@ export default function App() {
       try {
         // Match pricer exactly: trade_date last 2 days, notional_ccy filter
         const today = new Date();
-        const dateFrom = new Date(today.getTime() - 2*24*60*60*1000).toISOString().slice(0,10);
+        const dateFrom = new Date(today.getTime() - 1*24*60*60*1000).toISOString().slice(0,10);
         const sdrData = await sbFetch("dtcc_sdr", {
           select: "dissemination_id,event_timestamp,notional_leg1,strike_pct,opt_tenor,swp_tenor,notional_ccy,option_type_decoded,platform_identifier,action_type",
           trade_date: `gte.${dateFrom}`,
           notional_ccy: `eq.${activeCcy}`,
           opt_tenor: "not.is.null",
-          // swp_tenor: "not.is.null", // include caps/floors (null swp_tenor)
+          swp_tenor: "not.is.null",
           order: "event_timestamp.desc",
-          limit: "500",
+          limit: "2000",
         });
         console.log("[SDR] raw rows:", sdrData?.length, "for", activeCcy);
         if(sdrData?.length) {
@@ -3409,8 +3409,8 @@ export default function App() {
       {/* SDR FILTER BAR */}
       {(()=>{
         const PLATFORM_NAMES={"BGCD":"BGC","TWSF":"Tradition","TSEF":"Tradition","TPSE":"Tullett Prebon",
-          "IGDL":"ICAP","ISWE":"ICAP (E)","ISWV":"ICAP (V)","GSEF":"GFI","RTSX":"RTX","RTXS":"RTX",
-          "TRWB":"Tradeweb","DWSF":"Dealerweb","BLOM":"Bloomberg","ICSE":"ICE","BILT":"Bilateral","XXXX":"Bilateral"};
+          "IGDL":"ICAP","ISWE":"ICAP (E)","ISWV":"ICAP (V)","GSEF":"GFI",
+          "DWSF":"Dealerweb","ICSE":"ICE","BILT":"Bilateral","XXXX":"Bilateral"};
         const TYPE_LABELS={"CALL":"Payer","PUT":"Receiver","STR":"Straddle","STRG":"Strangle","EC":"Euro Swn","BCALL":"Berm Payer","NSTD":"Non-std","XCS":"XCCY Swn","OTH":"Other"};
         const VENUES=[...new Map(Object.entries(PLATFORM_NAMES).map(([k,v])=>[v,k])).entries()].map(([v,k])=>({k,v}));
         const ACTIONS=["NEWT","MODI","CORR","CANC"];
@@ -4085,4 +4085,4 @@ export default function App() {
   );
 }
 
-// 1905e
+// 1905g
