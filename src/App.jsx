@@ -2561,6 +2561,13 @@ function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatfor
           }
         });
         console.log("[SDR flash]", Object.keys(flash));
+        // Debug missing cells
+        const missing = ["1y|1Y","1y|20Y","1y|30Y","15y|10Y","5y|5Y","20y|10Y"];
+        missing.forEach(k => {
+          const [e,t] = k.split("|");
+          const dbRows = sdrData.filter(r => sdrExpToKey(r.opt_tenor)===e && sdrTenToKey(r.swp_tenor)===t);
+          console.log(`[SDR debug] ${k}: ${dbRows.length} DB rows`, dbRows.map(r=>({type:r.option_type_decoded,action:r.action_type,opt:r.opt_tenor,swp:r.swp_tenor})));
+        });
   return flash;
 }
 
@@ -4078,4 +4085,4 @@ export default function App() {
   );
 }
 
-// 1905d
+// 1905e
