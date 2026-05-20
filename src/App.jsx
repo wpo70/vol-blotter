@@ -2621,7 +2621,7 @@ export default function App() {
   const [sdrFilterAction,   setSdrFilterAction]   = useState([]);
   const [spreadName,   setSpreadName]   = useState("");
   const [spreadTwoWay, setSpreadTwoWay] = useState(false);
-  const [spreadCounter, setSpreadCounter] = useState({bid:"",offer:""});
+  const [spreadCounter, setSpreadCounter] = useState({bid:"",offer:"",bank:""});
   const [spreadLegs,   setSpreadLegs]   = useState([
     {exp:"1y", ten:"1Y",  spreadPx:"", ratio:"8", bank:"", side:"bid"},
     {exp:"1y", ten:"10Y", spreadPx:"", ratio:"1", bank:"", side:"offer"}
@@ -2852,6 +2852,45 @@ export default function App() {
   // quotes are session-only - not persisted to localStorage
   useEffect(() => { try { localStorage.setItem("vbl_otm2", JSON.stringify(otmQuotes.slice(0,200))); } catch {} }, [otmQuotes]);
   useEffect(() => { try { localStorage.setItem("vbl_spread_log", JSON.stringify(spreadLog.slice(0,100))); } catch {} }, [spreadLog]);
+
+  // Recompute spread implied prices when quotes or referred change
+  useEffect(() => {
+    if (!spreadLog.length) return;
+    const getLiveQ = (exp, ten) => {
+      const k = cellKey(exp.toLowerCase(), ten);
+      const cell = quotes[k];
+      if (!cell) return { liveBid: null, liveOffer: null };
+      const b = (cell.bids || []).filter(q => !referred.has(`${k}|bids|${q.id}`)).sort((a, c) => c.price - a.price);
+      const o = (cell.offers || []).filter(q => !referred.has(`${k}|offers|${q.id}`)).sort((a, c) => a.price - c.price);
+      return { liveBid: b[0]?.price ?? null, liveOffer: o[0]?.price ?? null };
+    };
+    const merged = {};
+    spreadLog.slice(0, 4).forEach(entry => {
+      if (!entry.legs || entry.legs.length < 2) return;
+      const legs = entry.legs.map(l => ({ ...l, spxN: parseFloat(l.spreadPx) || null, ratioN: parseFloat(l.ratio) || null, ...getLiveQ(l.exp, l.ten) }));
+      const [l0, l1] = legs;
+      if (!l0.spxN || !l1.spxN || !l0.ratioN || !l1.ratioN) return;
+      const R = l0.ratioN / l1.ratioN;
+      const bk = l0.bank || "";
+      const l0IsBid = (l0.side || "bid") === "bid";
+      // L0 → L1
+      if (l0IsBid || entry.twoWay) {
+        if (l0.liveOffer != null) { const v = +(l1.spxN + (l0.liveOffer - l0.spxN) * R).toFixed(4); const k = `${l1.exp.toLowerCase()}|${l1.ten}`; if (!merged[k]) merged[k] = {}; if (merged[k].offer == null || v < merged[k].offer) { merged[k].offer = v; merged[k].bank = bk; } }
+      }
+      if (!l0IsBid || entry.twoWay) {
+        if (l0.liveBid != null) { const v = +(l1.spxN + (l0.liveBid - l0.spxN) * R).toFixed(4); const k = `${l1.exp.toLowerCase()}|${l1.ten}`; if (!merged[k]) merged[k] = {}; if (merged[k].bid == null || v > merged[k].bid) { merged[k].bid = v; merged[k].bank = bk; } }
+      }
+      // L1 → L0
+      const l1IsOff = (l1.side || "offer") === "offer";
+      if (l1IsOff || entry.twoWay) {
+        if (l1.liveBid != null) { const v = +(l0.spxN + (l1.liveBid - l1.spxN) / R).toFixed(4); const k = `${l0.exp.toLowerCase()}|${l0.ten}`; if (!merged[k]) merged[k] = {}; if (merged[k].bid == null || v > merged[k].bid) { merged[k].bid = v; merged[k].bank = bk; } }
+      }
+      if (!l1IsOff || entry.twoWay) {
+        if (l1.liveOffer != null) { const v = +(l0.spxN + (l1.liveOffer - l1.spxN) / R).toFixed(4); const k = `${l0.exp.toLowerCase()}|${l0.ten}`; if (!merged[k]) merged[k] = {}; if (merged[k].offer == null || v < merged[k].offer) { merged[k].offer = v; merged[k].bank = bk; } }
+      }
+    });
+    setSpreadImplied(merged);
+  }, [quotes, referred, spreadLog]);
   useEffect(() => { try { localStorage.setItem("vbl_sdr_type",   JSON.stringify(sdrFilterType));     } catch {} }, [sdrFilterType]);
   useEffect(() => { try { localStorage.setItem("vbl_sdr_venue",  JSON.stringify(sdrFilterPlatform)); } catch {} }, [sdrFilterPlatform]);
   useEffect(() => { try { localStorage.setItem("vbl_sdr_action", JSON.stringify(sdrFilterAction));   } catch {} }, [sdrFilterAction]);
@@ -3931,7 +3970,7 @@ export default function App() {
               <button onClick={()=>{
                 setSpreadResult(null);setSpreadImplied({});setSpreadTwoWay(false);setSpreadName("");
                 setSpreadLegs([{exp:"1y",ten:"1Y",spreadPx:"",ratio:"8",side:"bid",bank:""},{exp:"1y",ten:"10Y",spreadPx:"",ratio:"1",side:"offer",bank:""}]);
-                setSpreadCounter({bid:"",offer:""});
+                setSpreadCounter({bid:"",offer:"",bank:""});
               }} style={{fontSize:7,padding:"1px 5px",borderRadius:2,cursor:"pointer",fontFamily:"inherit",border:"1px solid #3a1a1a",background:"rgba(60,20,20,.4)",color:"#a04040"}}>CLR</button>
               <button onClick={()=>setSpreadLegs(p=>p.length<4?[...p,{exp:"1y",ten:"10Y",spreadPx:"",ratio:"1",side:"offer",bank:""}]:p)}
                 style={{fontSize:7,padding:"1px 5px",borderRadius:2,cursor:"pointer",fontFamily:"inherit",border:"1px solid #2a3860",background:"rgba(20,30,50,.4)",color:"#5a96c8"}}>+LEG</button>
@@ -3983,24 +4022,17 @@ export default function App() {
                 if(!l1IsOff||spreadTwoWay){
                   if(l1.liveOffer!=null){const v=+(l0.spxN+(l1.liveOffer-l1.spxN)/R).toFixed(4);rows.push({lbl:`${l1.exp.toUpperCase()}×${l1.ten} offer ${l1.liveOffer}`,val:v,side:"offer",bank:bk});addImp(l0.exp,l0.ten,"offer",v);}
                 }
-                // Counter-based solve
+                // Counter-based solve — counter is spread differential on L0
                 const cBid=parseFloat(spreadCounter.bid)||null;
                 const cOff=parseFloat(spreadCounter.offer)||null;
-                if(cBid!=null){const v=+(l1.spxN+(cBid/R)).toFixed(4);rows.push({lbl:`Counter bid ${cBid}`,val:v,side:"bid",bank:bk,counter:true});addImp(l1.exp,l1.ten,"bid",v);}
-                if(cOff!=null){const v=+(l1.spxN+(cOff/R)).toFixed(4);rows.push({lbl:`Counter offer ${cOff}`,val:v,side:"offer",bank:bk,counter:true});addImp(l1.exp,l1.ten,"offer",v);}
+                const cBk=spreadCounter.bank||bk;
+                if(cBid!=null){const v=+(l1.spxN+cBid*R).toFixed(4);rows.push({lbl:`CNTR bid ${cBid}${cBk?" "+cBk:""}`,val:v,side:"bid",bank:cBk,counter:true});addImp(l1.exp,l1.ten,"bid",v);}
+                if(cOff!=null){const v=+(l1.spxN+cOff*R).toFixed(4);rows.push({lbl:`CNTR offer ${cOff}${cBk?" "+cBk:""}`,val:v,side:"offer",bank:cBk,counter:true});addImp(l1.exp,l1.ten,"offer",v);}
 
-                const label=spreadName||`${l0.ratioN}:${l1.ratioN} ${l0.exp.toUpperCase()}×${l0.ten} v ${l1.exp.toUpperCase()}×${l1.ten}`;
-                const entry={id:Date.now(),name:label,ts:new Date().toISOString(),rows,l0,l1,R,legs:JSON.parse(JSON.stringify(spreadLegs)),imp};
+                const label=spreadName||legs.map((l,i)=>`${i>0?"v ":""}${l.ratioN!=1?l.ratioN+":":""}${l.exp.toUpperCase()}×${l.ten}`).join(" ");
+                const entry={id:Date.now(),name:label,ts:new Date().toISOString(),rows,l0,l1,R,legs:JSON.parse(JSON.stringify(spreadLegs)),imp,twoWay:spreadTwoWay};
                 setSpreadLog(prev=>{
                   const next=[entry,...prev.filter(h=>h.name!==label)].slice(0,20);
-                  // Merge ALL active spread imps
-                  const merged={};
-                  next.slice(0,4).forEach(e=>{if(!e.imp)return;Object.entries(e.imp).forEach(([k,v])=>{
-                    if(!merged[k])merged[k]={};
-                    if(v.bid!=null&&(merged[k].bid==null||v.bid>merged[k].bid)){merged[k].bid=v.bid;merged[k].bank=v.bank;}
-                    if(v.offer!=null&&(merged[k].offer==null||v.offer<merged[k].offer)){merged[k].offer=v.offer;merged[k].bank=v.bank;}
-                  });});
-                  setSpreadImplied(merged);
                   return next;
                 });
                 setSpreadResult(entry);
@@ -4057,6 +4089,9 @@ export default function App() {
                   <input value={spreadCounter.offer} onChange={e=>setSpreadCounter(p=>({...p,offer:e.target.value}))}
                     placeholder="offer" style={{...iS,color:"#ff8c00",fontWeight:700,textAlign:"center",flex:1}}
                     onKeyDown={e=>e.key==="Enter"&&solve()}/>
+                  <input value={spreadCounter.bank} onChange={e=>setSpreadCounter(p=>({...p,bank:e.target.value.toUpperCase()}))}
+                    placeholder="BK" style={{...iS,color:bkc(spreadCounter.bank||""),fontWeight:700,textAlign:"center",width:36}}
+                    onKeyDown={e=>e.key==="Enter"&&solve()}/>
                 </div>
 
                 <button onClick={solve} style={{width:"100%",background:"rgba(60,10,100,.6)",border:"1px solid #7a30c0",
@@ -4109,7 +4144,7 @@ export default function App() {
                             <div style={{color:"#3a6080",fontSize:7}}>{h.rows?.filter(r=>!r.counter).map(r=>`${r.val}${r.side==="bid"?"b":"o"}`).join(" / ")}</div>
                             <div style={{color:"#2a1040",fontSize:6}}>{new Date(h.ts).toLocaleTimeString("en-GB",{hour12:false})}</div>
                           </div>
-                          <button onClick={()=>{setSpreadName(h.name);setSpreadLegs(h.legs);setSpreadResult(h);setSpreadCounter({bid:"",offer:""});}}
+                          <button onClick={()=>{setSpreadName(h.name);setSpreadLegs(h.legs);setSpreadResult(h);setSpreadCounter({bid:"",offer:"",bank:""});}}
                             style={{...iS,color:"#c080f0",borderColor:"#5a20a0",padding:"1px 5px",fontSize:7,flexShrink:0}}>↺</button>
                         </div>
                       );
