@@ -4029,7 +4029,7 @@ export default function App() {
                 if(cBid!=null){const v=+(l1.spxN+cBid*R).toFixed(4);rows.push({lbl:`CNTR bid ${cBid}${cBk?" "+cBk:""}`,val:v,side:"bid",bank:cBk,counter:true});addImp(l1.exp,l1.ten,"bid",v);}
                 if(cOff!=null){const v=+(l1.spxN+cOff*R).toFixed(4);rows.push({lbl:`CNTR offer ${cOff}${cBk?" "+cBk:""}`,val:v,side:"offer",bank:cBk,counter:true});addImp(l1.exp,l1.ten,"offer",v);}
 
-                const label=spreadName||legs.map((l,i)=>`${i>0?"v ":""}${l.ratioN!=1?l.ratioN+":":""}${l.exp.toUpperCase()}×${l.ten}`).join(" ");
+                const label=spreadName||`${legs.map(l=>`${l.exp}${l.ten.toLowerCase()}`).join(" v ")} ${legs.map(l=>l.ratioN).join(":")}`;
                 const entry={id:Date.now(),name:label,ts:new Date().toISOString(),rows,l0,l1,R,legs:JSON.parse(JSON.stringify(spreadLegs)),imp,twoWay:spreadTwoWay};
                 setSpreadLog(prev=>{
                   const next=[entry,...prev.filter(h=>h.name!==label)].slice(0,20);
@@ -4042,7 +4042,7 @@ export default function App() {
                 {/* Name + bank */}
                 <div style={{display:"grid",gridTemplateColumns:"1fr 44px",gap:3,marginBottom:4}}>
                   <input value={spreadName} onChange={e=>setSpreadName(e.target.value)}
-                    placeholder={spreadLegs.map(l=>`${l.exp.toUpperCase()}×${l.ten}`).join(" v ")}
+                    placeholder={`${spreadLegs.map(l=>`${l.exp}${l.ten.toLowerCase()}`).join(" v ")} ${spreadLegs.map(l=>l.ratio||"1").join(":")}`}
                     style={{...iS,color:"#c080f0",fontSize:8,padding:"3px 5px"}}/>
                   <input value={spreadLegs[0]?.bank||""} onChange={e=>setSpreadLegs(p=>p.map(l=>({...l,bank:e.target.value.toUpperCase()})))}
                     placeholder="BK" style={{...iS,color:bkc(spreadLegs[0]?.bank||""),fontWeight:700,textAlign:"center"}}/>
