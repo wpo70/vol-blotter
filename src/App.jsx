@@ -2347,7 +2347,7 @@ function CfOtmStrikePanel({ cfQuotes, cfRef, ccy, visStrikes, otmView, setOtmVie
             <span style={{color:l==="Nett Prem"?"#60d0a0":"#c0c8d0",fontWeight:700}}>{v}</span>
           </div>
         ))}
-      </div>},document.body)}
+      </div>,document.body)}
 
       <div style={{padding:"5px 10px",borderTop:"1px solid #1e3450",fontSize:8,color:"#1e3048",letterSpacing:".07em",flexShrink:0}}>OTM · INDICATIVE ONLY</div>
     </div>
