@@ -2525,7 +2525,8 @@ function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatfor
           });
           if (match) {
             pairedRcvrIds.add(match.dissemination_id);
-            straddles.push({...p, _paired:true, option_type_decoded:"STR", _label:"Straddle"});
+            straddles.push({...p, _paired:true, option_type_decoded:"STR", _label:"Straddle",
+              _rcvrPrem: parseFloat(match.premium_amount||0), _rcvrStrike: match.strike_pct});
             return;
           }
           // Then try strangle (different strike, same expiry/tenor, within 2 mins)
@@ -2536,7 +2537,8 @@ function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatfor
           });
           if (match) {
             pairedRcvrIds.add(match.dissemination_id);
-            straddles.push({...p, _paired:true, option_type_decoded:"STRG", _label:"Strangle"});
+            straddles.push({...p, _paired:true, option_type_decoded:"STRG", _label:"Strangle",
+              _rcvrPrem: parseFloat(match.premium_amount||0), _rcvrStrike: match.strike_pct});
           }
         });
 
@@ -2559,8 +2561,17 @@ function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatfor
           const k = `${expKey}|${tenKey}`;
           const ts = new Date(r.event_timestamp).getTime();
           if (!flash[k] || ts > flash[k].ts) {
+            const notl = parseFloat(r.notional_leg1||0);
+            const payPrem = parseFloat(r.premium_amount||0);
+            const rcvPrem = parseFloat(r._rcvrPrem||0);
+            const isPaired = !!r._paired;
+            const pBp  = notl>0 ? Math.round(payPrem/notl*1e6)/100 : 0;  // bp with 2dp
+            const rBp  = notl>0 ? Math.round(rcvPrem/notl*1e6)/100 : 0;
+            const nettBp = isPaired ? Math.round((pBp+rBp)*100)/100 : pBp;
             flash[k] = { notional: r.notional_leg1, rate: r.strike_pct,
-              prem: r.premium_amount, venue: r.platform_identifier,
+              rcvrStrike: r._rcvrStrike||null,
+              nettBp, pBp: isPaired?pBp:null, rBp: isPaired?rBp:null,
+              venue: r.platform_identifier,
               type: typeLabel(r.option_type_decoded), ts };
           }
         });
@@ -2845,13 +2856,19 @@ export default function App() {
     const PN = {"BGCD":"BGC","TPSE":"Tullett Prebon","ISWV":"ICAP (V)","IGDL":"ICAP","TWSF":"Tradition","TSEF":"Tradition","GSEF":"GFI","DWSF":"Dealerweb","BILT":"Bilateral","XXXX":"Bilateral"};
     const rows = [
       ['Notional', s.notional ? (+s.notional/1e6).toFixed(0)+'M' : '—'],
-      ['Nett Prem', s.prem != null ? (+s.prem).toFixed(2)+'bp' : '—'],
+      ['Nett Prem', s.nettBp != null ? s.nettBp.toFixed(1)+' bp' : '—'],
+      ...(s.pBp!=null ? [['P Prem', s.pBp.toFixed(1)+' bp']] : []),
+      ...(s.rBp!=null ? [['R Prem', s.rBp.toFixed(1)+' bp']] : []),
       ['Strike', s.rate ? (+s.rate*100).toFixed(3)+'%' : '—'],
+      ...(s.rcvrStrike ? [['R Strike', (+s.rcvrStrike*100).toFixed(3)+'%']] : []),
       ['Venue', PN[s.venue]||s.venue||'—'],
-      ['Age', Math.round((Date.now()-s.ts)/60000)+'m ago']
+      ['Age', s.ts ? (Math.round((Date.now()-s.ts)/60000) < 60 ? Math.round((Date.now()-s.ts)/60000)+'m ago' : Math.round((Date.now()-s.ts)/3600000)+'h ago') : '—']
     ];
     el.style.cssText = 'position:fixed;left:'+Math.min(sdrHover.x+12,window.innerWidth-200)+'px;top:'+Math.max(sdrHover.y-10,10)+'px;z-index:2147483647;background:rgba(8,12,24,.97);border:1px solid rgba(255,140,0,.6);border-radius:4px;padding:8px 12px;pointer-events:none;min-width:160px;box-shadow:0 4px 20px rgba(0,0,0,.8);font-family:monospace;display:block;';
-    el.innerHTML = '<div style="color:#ff9040;font-size:9px;font-weight:700;margin-bottom:5px">'+(s.type||'SDR')+'</div>'+rows.map(([l,v])=>'<div style="display:flex;justify-content:space-between;gap:16px;font-size:8px;margin-bottom:2px"><span style="color:#5a6080">'+l+'</span><span style="color:'+(l==='Nett Prem'?'#60d0a0':'#c0c8d0')+';font-weight:700">'+v+'</span></div>').join('');
+    el.innerHTML = '<div style="color:#ff9040;font-size:9px;font-weight:700;margin-bottom:5px">'+(s.type||'SDR')+'</div>'+rows.map(([l,v])=>{
+      const c = l==='Nett Prem'?'#60d0a0':l==='P Prem'||l==='R Prem'?'#509080':l==='Strike'||l==='R Strike'?'#c0b870':'#8890a0';
+      return '<div style="display:flex;justify-content:space-between;gap:16px;font-size:8px;margin-bottom:2px"><span style="color:#5a6080">'+l+'</span><span style="color:'+c+';font-weight:'+(l==='Nett Prem'?'700':'500')+'">'+v+'</span></div>';
+    }).join('');
   }, [sdrHover]);
 
   // Rebuild SDR flash when filters change
@@ -3620,7 +3637,7 @@ export default function App() {
                               {dispMid ?? "--"}
                             </div>
                             {_sdr && _sdrAge < 24*60*60*1000 && <div style={{color:_sdrAge<5*60*1000?"#ff8c00":"#a05010",fontSize:7,textAlign:"center",fontWeight:700}}>
-                              {_sdr.type||"SDR"} {_sdr.notional?(+_sdr.notional/1e6).toFixed(0)+"M":""}
+                              {_sdr.type||"SDR"} {_sdr.notional?(+_sdr.notional/1e6).toFixed(0)+"M":""}{_sdr.nettBp ? " "+_sdr.nettBp.toFixed(0)+"bp" : ""}
                             </div>}
 
                             {(()=>{
