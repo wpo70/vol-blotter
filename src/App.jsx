@@ -3948,10 +3948,10 @@ export default function App() {
               const getLive=(exp,ten)=>{
                 const k=cellKey(exp.toLowerCase(),ten);
                 const cell=quotes[k];
-                if(!cell) return {bid:null,offer:null};
+                if(!cell) return {liveBid:null,liveOffer:null};
                 const b=(cell.bids||[]).filter(q=>!isReferred(k,"bids",q.id)).sort((a,c)=>c.price-a.price);
                 const o=(cell.offers||[]).filter(q=>!isReferred(k,"offers",q.id)).sort((a,c)=>a.price-c.price);
-                return {bid:b[0]?.price??null, offer:o[0]?.price??null};
+                return {liveBid:b[0]?.price??null, liveOffer:o[0]?.price??null};
               };
 
               const solve=()=>{
@@ -3966,8 +3966,8 @@ export default function App() {
                 const addImp=(exp,ten,side,val)=>{
                   const k=`${exp.toLowerCase()}|${ten}`;
                   const live=getLive(exp,ten);
-                  if(side==="bid"&&(live.bid==null||val>=live.bid)){if(!imp[k])imp[k]={};imp[k].bid=val;imp[k].bank=bk;}
-                  if(side==="offer"&&(live.offer==null||val<=live.offer)){if(!imp[k])imp[k]={};imp[k].offer=val;imp[k].bank=bk;}
+                  if(side==="bid"&&(live.liveBid==null||val>=live.liveBid)){if(!imp[k])imp[k]={};imp[k].bid=val;imp[k].bank=bk;}
+                  if(side==="offer"&&(live.liveOffer==null||val<=live.liveOffer)){if(!imp[k])imp[k]={};imp[k].offer=val;imp[k].bank=bk;}
                 };
                 const l0IsBid=(l0.side||"bid")==="bid";
                 const l1IsOff=(l1.side||"offer")==="offer";
@@ -4024,7 +4024,7 @@ export default function App() {
                 {/* Legs */}
                 {spreadLegs.map((l,i)=>{
                   const live=getLive(l.exp,l.ten);
-                  const liveStr=live.bid!=null||live.offer!=null?`${live.bid??'—'}/${live.offer??'—'}`:null;
+                  const liveStr=live.liveBid!=null||live.liveOffer!=null?`${live.liveBid??'—'}/${live.liveOffer??'—'}`:null;
                   return (
                     <div key={i} style={{marginBottom:3}}>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 34px 50px 22px 22px",gap:2,alignItems:"center"}}>
