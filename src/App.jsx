@@ -2857,8 +2857,8 @@ export default function App() {
   const [PREM_MIN, PREM_MAX] = CCY_PREM_RANGE[activeCcy] || [6,1700];
   const [ccyStore, setCcyStore] = useState({AUD:{quotes:{},log:[],referred:new Set()},USD:{quotes:{},log:[],referred:new Set()},EUR:{quotes:{},log:[],referred:new Set()},JPY:{quotes:{},log:[],referred:new Set()}});
 
-  useEffect(() => { try { localStorage.setItem(`vbl_log4_${activeCcy}`, JSON.stringify(log.slice(0,300))); } catch {} }, [log, activeCcy]);
-  useEffect(() => { try { localStorage.setItem(`vbl_quotes_${activeCcy}`, JSON.stringify(quotes)); } catch {} }, [quotes, activeCcy]);
+  useEffect(() => { try { localStorage.setItem(`vbl_log4_${activeCcy}`, JSON.stringify(log.slice(0,300))); } catch {} }, [log]);
+  useEffect(() => { try { localStorage.setItem(`vbl_quotes_${activeCcy}`, JSON.stringify(quotes)); } catch {} }, [quotes]);
   useEffect(() => { try { localStorage.setItem("vbl_otm2", JSON.stringify(otmQuotes.slice(0,200))); } catch {} }, [otmQuotes]);
   useEffect(() => { try { localStorage.setItem("vbl_spread_log", JSON.stringify(spreadLog.slice(0,100))); } catch {} }, [spreadLog]);
   useEffect(() => { try { localStorage.setItem("vbl_sdr_type",   JSON.stringify(sdrFilterType));     } catch {} }, [sdrFilterType]);
@@ -3575,7 +3575,7 @@ export default function App() {
                     return (
                       <td key={ten} className="hv"
                         onClick={()=>!isActive && openCell(exp,ten)}
-                        onMouseEnter={e=>{setHoveredCell(k);if(sdrFlashRef.current[k]&&Date.now()-sdrFlashRef.current[k].ts<86400000){setSdrHover({sdr:sdrFlashRef.current[k],x:e.clientX,y:e.clientY});}}}
+                        onMouseEnter={e=>{setHoveredCell(k);const _wf=(window.__sdrFlash||{});const _ws=_wf[k];if(_ws&&Date.now()-_ws.ts<86400000){setSdrHover({sdr:_ws,x:e.clientX,y:e.clientY});}}}
                         onMouseLeave={()=>{setHoveredCell(null);setSdrHover(null);}}
                         style={{background:bg,border:`1px solid ${bdr}`,padding:"2px 2px",position:"relative",transition:"background .1s",cursor:"pointer",minWidth:88,verticalAlign:"top"}}>
 
