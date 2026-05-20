@@ -2542,16 +2542,15 @@ function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatfor
           }
         });
 
-        // Build flash map from all trades
+        // Build flash map — NEWT only, classified (following pricer Full Trade Analytics)
+        const pairedPayerIds = new Set(straddles.map(s=>s.dissemination_id));
         const allTrades = [
           ...straddles,
-          ...newt.filter(r => r.option_type_decoded==="CALL" && !straddles.find(s=>s.dissemination_id===r.dissemination_id)),
-          ...newt.filter(r => r.option_type_decoded==="PUT"  && !pairedRcvrIds.has(r.dissemination_id)),
+          ...payers.filter(r => !pairedPayerIds.has(r.dissemination_id)),
+          ...rcvrs.filter(r => !pairedRcvrIds.has(r.dissemination_id)),
           ...newt.filter(r => !["CALL","PUT"].includes(r.option_type_decoded)),
-          ...sdrData.filter(r => r.action_type!=="NEWT"),
         ]
-          .filter(r=>actF.length===0||actF.includes(r.action_type))
-          .filter(r=>typF.length===0||typF.includes(r.option_type_decoded))
+          .filter(r=>typF.length===0||typF.includes(typeLabel(r.option_type_decoded)))
           .filter(r=>venF.length===0||venF.includes(r.platform_identifier));
 
         allTrades.forEach(r => {
@@ -2562,17 +2561,15 @@ function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatfor
           const ts = new Date(r.event_timestamp).getTime();
             const notl = parseFloat(r.notional_leg1||0);
             const payPrem = parseFloat(r.premium_amount||0);
-            const rcvPrem = parseFloat(r._rcvrPrem||0);
             const isPaired = !!r._paired;
             const isDW = r.platform_identifier === "DWSF";
             let nettBp;
             if (isPaired && isDW) {
-              const p = notl>0 ? payPrem/notl*10000 : 0;
-              const rc = notl>0 ? rcvPrem/notl*10000 : 0;
-              nettBp = Math.round((p+rc)*100)/100;
-            } else if (isPaired) {
-              nettBp = notl>0 ? Math.round(payPrem/notl*1e6)/100 : 0;
+              // Dealerweb: each leg carries half prem, sum for nett
+              const rcvPrem = parseFloat(r._rcvrPrem||0);
+              nettBp = notl>0 ? Math.round((payPrem+rcvPrem)/notl*1e6)/100 : 0;
             } else {
+              // All others (paired or single): payer prem = full premium
               nettBp = notl>0 ? Math.round(payPrem/notl*1e6)/100 : 0;
             }
             const strikeAdj = isDW ? 100 : 1;
