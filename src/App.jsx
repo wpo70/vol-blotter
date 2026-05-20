@@ -4022,12 +4022,12 @@ export default function App() {
                 if(!l1IsOff||spreadTwoWay){
                   if(l1.liveOffer!=null){const v=+(l0.spxN+(l1.liveOffer-l1.spxN)/R).toFixed(4);rows.push({lbl:`${l1.exp.toUpperCase()}×${l1.ten} offer ${l1.liveOffer}`,val:v,side:"offer",bank:bk});addImp(l0.exp,l0.ten,"offer",v);}
                 }
-                // Counter-based solve — counter is spread differential on L0
+                // Counter-based solve — counter bid/offer is on L1, implies L0
                 const cBid=parseFloat(spreadCounter.bid)||null;
                 const cOff=parseFloat(spreadCounter.offer)||null;
                 const cBk=spreadCounter.bank||bk;
-                if(cBid!=null){const v=+(l1.spxN+cBid*R).toFixed(4);rows.push({lbl:`CNTR bid ${cBid}${cBk?" "+cBk:""}`,val:v,side:"bid",bank:cBk,counter:true});addImp(l1.exp,l1.ten,"bid",v);}
-                if(cOff!=null){const v=+(l1.spxN+cOff*R).toFixed(4);rows.push({lbl:`CNTR offer ${cOff}${cBk?" "+cBk:""}`,val:v,side:"offer",bank:cBk,counter:true});addImp(l1.exp,l1.ten,"offer",v);}
+                if(cBid!=null){const v=+(l0.spxN+(cBid-l1.spxN)/R).toFixed(4);rows.push({lbl:`CNTR bid ${cBid}${cBk?" "+cBk:""}`,val:v,side:"bid",bank:cBk,counter:true});addImp(l0.exp,l0.ten,"bid",v);}
+                if(cOff!=null){const v=+(l0.spxN+(cOff-l1.spxN)/R).toFixed(4);rows.push({lbl:`CNTR offer ${cOff}${cBk?" "+cBk:""}`,val:v,side:"offer",bank:cBk,counter:true});addImp(l0.exp,l0.ten,"offer",v);}
 
                 const label=spreadName||`${legs.map(l=>`${l.exp}${l.ten.toLowerCase()}`).join(" v ")} ${legs.map(l=>l.ratioN).join(":")}`;
                 const entry={id:Date.now(),name:label,ts:new Date().toISOString(),rows,l0,l1,R,legs:JSON.parse(JSON.stringify(spreadLegs)),imp,twoWay:spreadTwoWay};
