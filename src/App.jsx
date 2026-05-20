@@ -2316,23 +2316,9 @@ function CfOtmStrikePanel({ cfQuotes, cfRef, ccy, visStrikes, otmView, setOtmVie
           ))
         }
       </div>
-      {sdrHover&&(()=>{
-        const {sdr,x,y}=sdrHover;
-        const PN={"BGCD":"BGC","TWSF":"Tradition","TSEF":"Tradition","TPSE":"Tullett Prebon","IGDL":"ICAP","ISWE":"ICAP (E)","ISWV":"ICAP (V)","GSEF":"GFI","DWSF":"Dealerweb","ICSE":"ICE","BILT":"Bilateral","XXXX":"Bilateral"};
-        const notional = sdr.notional ? (+sdr.notional>=1e9?(+sdr.notional/1e9).toFixed(1)+"B":(+sdr.notional/1e6).toFixed(0)+"M") : "—";
-        const prem = sdr.prem!=null ? (+sdr.prem).toFixed(2)+"bp" : "—";
-        const strike = sdr.rate ? (+sdr.rate*100).toFixed(3)+"%" : "—";
-        const venue = PN[sdr.venue]||sdr.venue||"—";
-        const age = Math.round((Date.now()-sdr.ts)/60000);
-        return <div style={{position:"fixed",left:Math.min(x+12,window.innerWidth-180),top:Math.max(y-10,10),zIndex:9999,background:"rgba(8,12,24,.97)",border:"1px solid rgba(255,140,0,.5)",borderRadius:4,padding:"8px 12px",pointerEvents:"none",minWidth:160}}>
-          <div style={{color:"#ff9040",fontSize:9,fontWeight:700,marginBottom:5}}>{sdr.type}</div>
-          {[["Notional",notional],["Nett Prem",prem],["Strike",strike],["Venue",venue],["Age",age+"m ago"]].map(([l,v])=>(
-            <div key={l} style={{display:"flex",justifyContent:"space-between",gap:16,fontSize:8,marginBottom:2}}>
-              <span style={{color:"#5a6080"}}>{l}</span>
-              <span style={{color:l==="Nett Prem"?"#60d0a0":"#c0c8d0",fontWeight:700}}>{v}</span>
-            </div>))}
-        </div>;
-      })()}
+      {sdrHover&&<div style={{position:"fixed",left:sdrHover.x+12,top:sdrHover.y-10,zIndex:99999,background:"red",color:"white",padding:"8px",borderRadius:4,pointerEvents:"none",fontSize:12}}>
+        SDR: {sdrHover.sdr?.type} {sdrHover.sdr?.notional?(+sdrHover.sdr.notional/1e6).toFixed(0)+"M":""}
+      </div>}
       <div style={{padding:"5px 10px",borderTop:"1px solid #1e3450",fontSize:8,color:"#1e3048",letterSpacing:".07em",flexShrink:0}}>OTM · INDICATIVE ONLY</div>
     </div>
   );
@@ -4112,5 +4098,3 @@ export default function App() {
     </div>
   );
 }
-
-// 2005p
