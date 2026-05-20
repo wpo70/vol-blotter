@@ -2560,7 +2560,6 @@ function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatfor
           if (!expKey || !tenKey) return;
           const k = `${expKey}|${tenKey}`;
           const ts = new Date(r.event_timestamp).getTime();
-          if (!flash[k] || ts > flash[k].ts) {
             const notl = parseFloat(r.notional_leg1||0);
             const payPrem = parseFloat(r.premium_amount||0);
             const rcvPrem = parseFloat(r._rcvrPrem||0);
@@ -2568,24 +2567,24 @@ function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatfor
             const isDW = r.platform_identifier === "DWSF";
             let nettBp;
             if (isPaired && isDW) {
-              // Dealerweb: each leg carries its own premium, sum for nett; strike /100
               const p = notl>0 ? payPrem/notl*10000 : 0;
               const rc = notl>0 ? rcvPrem/notl*10000 : 0;
               nettBp = Math.round((p+rc)*100)/100;
             } else if (isPaired) {
-              // All other brokers: each leg carries FULL straddle premium (double-published)
               nettBp = notl>0 ? Math.round(payPrem/notl*1e6)/100 : 0;
             } else {
-              // Single leg (unpaired Payer/Receiver/other)
               nettBp = notl>0 ? Math.round(payPrem/notl*1e6)/100 : 0;
             }
             const strikeAdj = isDW ? 100 : 1;
-            flash[k] = { notional: r.notional_leg1, rate: r.strike_pct ? r.strike_pct/strikeAdj : r.strike_pct,
+            const entry = { notional: r.notional_leg1, rate: r.strike_pct ? r.strike_pct/strikeAdj : r.strike_pct,
               rcvrStrike: r._rcvrStrike ? r._rcvrStrike/strikeAdj : null,
               nettBp, venue: r.platform_identifier,
               type: typeLabel(r.option_type_decoded), ts };
-          }
+            if (!flash[k]) flash[k] = [];
+            flash[k].push(entry);
         });
+        // Sort each cell's trades newest-first
+        Object.values(flash).forEach(arr => arr.sort((a,b) => b.ts - a.ts));
         console.log("[SDR flash]", Object.keys(flash));
         // Debug missing cells
         const missing = ["1y|1Y","1y|20Y","1y|30Y","15y|10Y","5y|5Y","20y|10Y"];
@@ -2863,21 +2862,27 @@ export default function App() {
     let el = document.getElementById('__sdrTip');
     if (!el) { el = document.createElement('div'); el.id = '__sdrTip'; document.body.appendChild(el); }
     if (!sdrHover) { el.style.display='none'; return; }
-    const s = sdrHover.sdr;
+    const trades = sdrHover.trades || (sdrHover.sdr ? [sdrHover.sdr] : []);
+    if (!trades.length) { el.style.display='none'; return; }
     const PN = {"BGCD":"BGC","TPSE":"Tullett Prebon","ISWV":"ICAP (V)","IGDL":"ICAP","TWSF":"Tradition","TSEF":"Tradition","GSEF":"GFI","DWSF":"Dealerweb","BILT":"Bilateral","XXXX":"Bilateral"};
-    const rows = [
-      ['Notional', s.notional ? (+s.notional/1e6).toFixed(0)+'M' : '—'],
-      ['Nett Prem', s.nettBp != null ? s.nettBp.toFixed(1)+' bp' : '—'],
-      ['Strike', s.rate ? (+s.rate).toFixed(3)+'%' : '—'],
-      ...(s.rcvrStrike ? [['R Strike', (+s.rcvrStrike).toFixed(3)+'%']] : []),
-      ['Venue', PN[s.venue]||s.venue||'—'],
-      ['Age', s.ts ? (Math.round((Date.now()-s.ts)/60000) < 60 ? Math.round((Date.now()-s.ts)/60000)+'m ago' : Math.round((Date.now()-s.ts)/3600000)+'h ago') : '—']
-    ];
-    el.style.cssText = 'position:fixed;left:'+Math.min(sdrHover.x+12,window.innerWidth-200)+'px;top:'+Math.max(sdrHover.y-10,10)+'px;z-index:2147483647;background:rgba(8,12,24,.97);border:1px solid rgba(255,140,0,.6);border-radius:4px;padding:8px 12px;pointer-events:none;min-width:160px;box-shadow:0 4px 20px rgba(0,0,0,.8);font-family:monospace;display:block;';
-    el.innerHTML = '<div style="color:#ff9040;font-size:9px;font-weight:700;margin-bottom:5px">'+(s.type||'SDR')+'</div>'+rows.map(([l,v])=>{
-      const c = l==='Nett Prem'?'#60d0a0':l==='P Prem'||l==='R Prem'?'#509080':l==='Strike'||l==='R Strike'?'#c0b870':'#8890a0';
-      return '<div style="display:flex;justify-content:space-between;gap:16px;font-size:8px;margin-bottom:2px"><span style="color:#5a6080">'+l+'</span><span style="color:'+c+';font-weight:'+(l==='Nett Prem'?'700':'500')+'">'+v+'</span></div>';
+    const ageFmt = ts => { if(!ts) return '—'; const m=Math.round((Date.now()-ts)/60000); return m<60?m+'m ago':Math.round(m/60)+'h ago'; };
+    const tradeHtml = trades.map((s,i) => {
+      const rows = [
+        ['Notional', s.notional ? (+s.notional/1e6).toFixed(0)+'M' : '—'],
+        ['Nett Prem', s.nettBp != null ? s.nettBp.toFixed(1)+' bp' : '—'],
+        ['Strike', s.rate ? (+s.rate).toFixed(3)+'%' : '—'],
+        ...(s.rcvrStrike ? [['R Strike', (+s.rcvrStrike).toFixed(3)+'%']] : []),
+        ['Venue', PN[s.venue]||s.venue||'—'],
+        ['Age', ageFmt(s.ts)]
+      ];
+      const sep = i>0 ? '<div style="border-top:1px solid rgba(255,140,0,.25);margin:5px 0"></div>' : '';
+      return sep+'<div style="color:#ff9040;font-size:9px;font-weight:700;margin-bottom:4px">'+(s.type||'SDR')+'</div>'+rows.map(([l,v])=>{
+        const c = l==='Nett Prem'?'#60d0a0':l==='Strike'||l==='R Strike'?'#c0b870':'#8890a0';
+        return '<div style="display:flex;justify-content:space-between;gap:16px;font-size:8px;margin-bottom:2px"><span style="color:#5a6080">'+l+'</span><span style="color:'+c+';font-weight:'+(l==='Nett Prem'?'700':'500')+'">'+v+'</span></div>';
+      }).join('');
     }).join('');
+    el.style.cssText = 'position:fixed;left:'+Math.min(sdrHover.x+12,window.innerWidth-220)+'px;top:'+Math.max(sdrHover.y-10,10)+'px;z-index:2147483647;background:rgba(8,12,24,.97);border:1px solid rgba(255,140,0,.6);border-radius:4px;padding:8px 12px;pointer-events:none;min-width:170px;max-height:400px;overflow-y:auto;box-shadow:0 4px 20px rgba(0,0,0,.8);font-family:monospace;display:block;';
+    el.innerHTML = tradeHtml;
   }, [sdrHover]);
 
   // Rebuild SDR flash when filters change
@@ -3575,7 +3580,8 @@ export default function App() {
 
                     // Base = premium heatmap, override with quote state colour
                     let bg = heatBg(viewMode==="premium" ? prem : mid, viewMode==="premium" ? PREM_MIN : VOL_MIN, viewMode==="premium" ? PREM_MAX : VOL_MAX);
-                    const _sdr = sdrFlash[k];
+                    const _sdrArr = sdrFlash[k] || [];
+                    const _sdr = _sdrArr[0] || null;
                     const _sdrAge = _sdr ? (Date.now() - _sdr.ts) : Infinity;
                     if (_sdrAge < 30*60*1000)        bg = "rgba(255,160,40,.50)"; // < 30min
                     else if (_sdrAge < 4*60*60*1000)  bg = "rgba(220,130,20,.32)"; // < 4hr
@@ -3590,9 +3596,9 @@ export default function App() {
 
                     return (
                       <td key={ten} className="hv"
-                        data-sdr={(_sdr&&_sdrAge<86400000)?JSON.stringify(_sdr):null}
+                        data-sdr={(_sdr&&_sdrAge<86400000)?JSON.stringify(_sdrArr):null}
                         onClick={()=>!isActive && openCell(exp,ten)}
-                        onMouseEnter={e=>{setHoveredCell(k);try{const _d=e.currentTarget.getAttribute("data-sdr");if(_d){const _s=JSON.parse(_d);setSdrHover({sdr:_s,x:e.clientX,y:e.clientY});}}catch(err){}}}
+                        onMouseEnter={e=>{setHoveredCell(k);try{const _d=e.currentTarget.getAttribute("data-sdr");if(_d){const _a=JSON.parse(_d);setSdrHover({trades:_a,x:e.clientX,y:e.clientY});}}catch(err){}}}
                         onMouseLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget)){setHoveredCell(null);setSdrHover(null);}}}
                         style={{background:bg,border:`1px solid ${bdr}`,padding:"2px 2px",position:"relative",transition:"background .1s",cursor:"pointer",minWidth:88,verticalAlign:"top"}}>
 
@@ -3640,13 +3646,13 @@ export default function App() {
                             </div>
                           </div>
                         ) : (
-                          <div onMouseEnter={e=>{const _s=(window.__sdrFlash||{})[k];if(_s){setSdrHover({sdr:_s,x:e.clientX,y:e.clientY});}else{setHoveredCell(k);}}} style={{display:"flex",flexDirection:"column",padding:"2px 3px",gap:0,minHeight:22}}>
+                          <div onMouseEnter={e=>{const _a=(window.__sdrFlash||{})[k];if(_a&&_a.length){setSdrHover({trades:_a,x:e.clientX,y:e.clientY});}else{setHoveredCell(k);}}} style={{display:"flex",flexDirection:"column",padding:"2px 3px",gap:0,minHeight:22}}>
                             {isHov && <div style={{textAlign:"center",color:"#3a80b8",fontSize:7,marginBottom:1}}>fwd {FWD[exp]?.[ti]?.toFixed(3)??"--"}%</div>}
                             <div style={{textAlign:"center",color:(hasBid||hasOff)?"#508090":"#68a0ba",fontSize:(hasBid||hasOff)?8:11,fontWeight:(hasBid||hasOff)?400:500,opacity:(hasBid||hasOff)?.45:1,marginBottom:(hasBid||hasOff)?1:0}}>
                               {dispMid ?? "--"}
                             </div>
                             {_sdr && _sdrAge < 24*60*60*1000 && <div style={{color:_sdrAge<5*60*1000?"#ff8c00":"#a05010",fontSize:7,textAlign:"center",fontWeight:700}}>
-                              {_sdr.type||"SDR"} {_sdr.notional?(+_sdr.notional/1e6).toFixed(0)+"M":""}{_sdr.nettBp ? " "+_sdr.nettBp.toFixed(0)+"bp" : ""}
+                              {_sdr.type||"SDR"} {_sdr.notional?(+_sdr.notional/1e6).toFixed(0)+"M":""}{_sdr.nettBp ? " "+_sdr.nettBp.toFixed(0)+"bp" : ""}{_sdrArr.length>1 ? " +"+(_sdrArr.length-1) : ""}
                             </div>}
 
                             {(()=>{
