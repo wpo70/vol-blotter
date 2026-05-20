@@ -2566,26 +2566,22 @@ function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatfor
             const rcvPrem = parseFloat(r._rcvrPrem||0);
             const isPaired = !!r._paired;
             const isDW = r.platform_identifier === "DWSF";
-            let nettBp, pBp, rBp;
+            let nettBp;
             if (isPaired && isDW) {
-              // Dealerweb: each leg carries its own premium, needs /100 adjustment, sum for nett
-              pBp  = notl>0 ? Math.round(payPrem/notl*1e4)/100 : 0;
-              rBp  = notl>0 ? Math.round(rcvPrem/notl*1e4)/100 : 0;
-              nettBp = Math.round((pBp+rBp)*100)/100;
+              // Dealerweb: each leg carries its own premium (/100 adj), sum for nett
+              const p = notl>0 ? payPrem/notl*100 : 0;
+              const rc = notl>0 ? rcvPrem/notl*100 : 0;
+              nettBp = Math.round((p+rc)*100)/100;
             } else if (isPaired) {
-              // All other brokers: each leg carries FULL straddle premium
+              // All other brokers: each leg carries FULL straddle premium (double-published)
               nettBp = notl>0 ? Math.round(payPrem/notl*1e6)/100 : 0;
-              pBp = Math.round(nettBp*50)/100;  // half each
-              rBp = Math.round(nettBp*50)/100;
             } else {
               // Single leg (unpaired Payer/Receiver/other)
               nettBp = notl>0 ? Math.round(payPrem/notl*1e6)/100 : 0;
-              pBp = null; rBp = null;
             }
             flash[k] = { notional: r.notional_leg1, rate: r.strike_pct,
               rcvrStrike: r._rcvrStrike||null,
-              nettBp, pBp, rBp,
-              venue: r.platform_identifier,
+              nettBp, venue: r.platform_identifier,
               type: typeLabel(r.option_type_decoded), ts };
           }
         });
@@ -2871,8 +2867,6 @@ export default function App() {
     const rows = [
       ['Notional', s.notional ? (+s.notional/1e6).toFixed(0)+'M' : '—'],
       ['Nett Prem', s.nettBp != null ? s.nettBp.toFixed(1)+' bp' : '—'],
-      ...(s.pBp!=null ? [['P Prem', s.pBp.toFixed(1)+' bp']] : []),
-      ...(s.rBp!=null ? [['R Prem', s.rBp.toFixed(1)+' bp']] : []),
       ['Strike', s.rate ? (+s.rate).toFixed(3)+'%' : '—'],
       ...(s.rcvrStrike ? [['R Strike', (+s.rcvrStrike).toFixed(3)+'%']] : []),
       ['Venue', PN[s.venue]||s.venue||'—'],
