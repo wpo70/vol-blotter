@@ -2621,6 +2621,7 @@ export default function App() {
   const [sortDir,    setSortDir]          = useState("desc");
   const [sdrFlash, setSdrFlash] = useState({});
   const [sdrHover, setSdrHover] = useState(null);
+  const sdrFlashRef = React.useRef({});
   const [sdrRawData, setSdrRawData] = useState([]);
   const sdrManualPollRef = React.useRef(null);
   const [sdrCfCount, setSdrCfCount] = useState({caps:0,floors:0,total:0});
@@ -2863,11 +2864,22 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem("vbl_sdr_type",   JSON.stringify(sdrFilterType));     } catch {} }, [sdrFilterType]);
   useEffect(() => { try { localStorage.setItem("vbl_sdr_venue",  JSON.stringify(sdrFilterPlatform)); } catch {} }, [sdrFilterPlatform]);
   useEffect(() => { try { localStorage.setItem("vbl_sdr_action", JSON.stringify(sdrFilterAction));   } catch {} }, [sdrFilterAction]);
+  // Document-level SDR hover via data attribute
+  useEffect(() => {
+    const fn = e => {
+      const el = e.target && e.target.closest ? e.target.closest("[data-sdrkey]") : null;
+      const k = el ? el.getAttribute("data-sdrkey") : null;
+      if (k) { const s=sdrFlashRef.current[k]; if(s){setSdrHover({sdr:s,x:e.clientX,y:e.clientY});return;} }
+      setSdrHover(null);
+    };
+    document.addEventListener("mousemove", fn);
+    return () => document.removeEventListener("mousemove", fn);
+  }, []);
   // Rebuild SDR flash when filters change
   useEffect(() => {
     if (!sdrRawData.length) return;
     const flash = buildSdrFlash(sdrRawData, sdrFilterAction, sdrFilterType, sdrFilterPlatform);
-    window.__sdrFlash=flash; setSdrFlash(flash);
+    window.__sdrFlash=flash; sdrFlashRef.current=flash; setSdrFlash(flash);
   }, [sdrFilterAction, sdrFilterType, sdrFilterPlatform, sdrRawData]);
 
   // SDR trade poll
@@ -3621,7 +3633,7 @@ export default function App() {
                             </div>
                           </div>
                         ) : (
-                          <div onMouseEnter={e=>{const _s=(window.__sdrFlash||{})[k];if(_s){setSdrHover({sdr:_s,x:e.clientX,y:e.clientY});}else{setHoveredCell(k);}}} style={{display:"flex",flexDirection:"column",padding:"2px 3px",gap:0,minHeight:22}}>
+                          <div onMouseEnter={e=>{const _s=(window.__sdrFlash||{})[k];if(_s){setSdrHover({sdr:_s,x:e.clientX,y:e.clientY});}else{setHoveredCell(k);}}} data-sdrkey={(_sdr&&_sdrAge<86400000)?k:undefined} style={{display:"flex",flexDirection:"column",padding:"2px 3px",gap:0,minHeight:22}}>
                             {isHov && <div style={{textAlign:"center",color:"#3a80b8",fontSize:7,marginBottom:1}}>fwd {FWD[exp]?.[ti]?.toFixed(3)??"--"}%</div>}
                             <div style={{textAlign:"center",color:(hasBid||hasOff)?"#508090":"#68a0ba",fontSize:(hasBid||hasOff)?8:11,fontWeight:(hasBid||hasOff)?400:500,opacity:(hasBid||hasOff)?.45:1,marginBottom:(hasBid||hasOff)?1:0}}>
                               {dispMid ?? "--"}
