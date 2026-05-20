@@ -1,5 +1,6 @@
 // RateEdge vol-blotter 0704d
 import React, { useState, useCallback, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL  || "";
@@ -2333,7 +2334,7 @@ function CfOtmStrikePanel({ cfQuotes, cfRef, ccy, visStrikes, otmView, setOtmVie
             </div>))}
         </div>;
       })()}
-      {sdrHover&&<div style={{position:"fixed",left:Math.min(sdrHover.x+12,window.innerWidth-200),top:Math.max(sdrHover.y-10,10),zIndex:99999,background:"rgba(8,12,24,.97)",border:"1px solid rgba(255,140,0,.6)",borderRadius:4,padding:"8px 12px",pointerEvents:"none",minWidth:160,boxShadow:"0 4px 20px rgba(0,0,0,.6)"}}>
+      {sdrHover&&createPortal(sdrHover&&<div style={{position:"fixed",left:Math.min(sdrHover.x+12,window.innerWidth-200),top:Math.max(sdrHover.y-10,10),zIndex:99999,background:"rgba(8,12,24,.97)",border:"1px solid rgba(255,140,0,.6)",borderRadius:4,padding:"8px 12px",pointerEvents:"none",minWidth:160,boxShadow:"0 4px 20px rgba(0,0,0,.6)"}}>
         <div style={{color:"#ff9040",fontSize:9,fontWeight:700,marginBottom:5}}>{sdrHover.sdr.type}</div>
         {[["Notional",sdrHover.sdr.notional?(+sdrHover.sdr.notional/1e6).toFixed(0)+"M":"—"],
           ["Nett Prem",sdrHover.sdr.prem!=null?(+sdrHover.sdr.prem).toFixed(2)+"bp":"—"],
@@ -2346,7 +2347,7 @@ function CfOtmStrikePanel({ cfQuotes, cfRef, ccy, visStrikes, otmView, setOtmVie
             <span style={{color:l==="Nett Prem"?"#60d0a0":"#c0c8d0",fontWeight:700}}>{v}</span>
           </div>
         ))}
-      </div>}
+      </div>},document.body)}
 
       <div style={{padding:"5px 10px",borderTop:"1px solid #1e3450",fontSize:8,color:"#1e3048",letterSpacing:".07em",flexShrink:0}}>OTM · INDICATIVE ONLY</div>
     </div>
@@ -2606,7 +2607,7 @@ function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatfor
 
 
 export default function App() {
-  const [quotes, setQuotes]               = useState(() => loadLS("vbl_quotes_AUD",{}));
+  const [quotes, setQuotes]               = useState({});  // always start fresh - history preserves quotes
   const [referred, setReferred]           = useState(new Set());   // Set of "k|side|id" that are referred
   const [activeCell, setActiveCell]       = useState(null);
   const [editVals, setEditVals]           = useState({ bid:"", offer:"", bidBank:"", offerBank:"" });
@@ -2858,7 +2859,7 @@ export default function App() {
   const [ccyStore, setCcyStore] = useState({AUD:{quotes:{},log:[],referred:new Set()},USD:{quotes:{},log:[],referred:new Set()},EUR:{quotes:{},log:[],referred:new Set()},JPY:{quotes:{},log:[],referred:new Set()}});
 
   useEffect(() => { try { localStorage.setItem(`vbl_log4_${activeCcy}`, JSON.stringify(log.slice(0,300))); } catch {} }, [log]);
-  useEffect(() => { try { localStorage.setItem(`vbl_quotes_${activeCcy}`, JSON.stringify(quotes)); } catch {} }, [quotes]);
+  // quotes are session-only - not persisted to localStorage
   useEffect(() => { try { localStorage.setItem("vbl_otm2", JSON.stringify(otmQuotes.slice(0,200))); } catch {} }, [otmQuotes]);
   useEffect(() => { try { localStorage.setItem("vbl_spread_log", JSON.stringify(spreadLog.slice(0,100))); } catch {} }, [spreadLog]);
   useEffect(() => { try { localStorage.setItem("vbl_sdr_type",   JSON.stringify(sdrFilterType));     } catch {} }, [sdrFilterType]);
@@ -3040,7 +3041,7 @@ export default function App() {
     // load new ccy state - from memory first, then localStorage
     const stored = ccyStore[ccy];
     const savedLog = loadLS(`vbl_log4_${ccy}`,[]).map(l=>({...l,ts:new Date(l.ts)}));
-    const savedQuotes = loadLS(`vbl_quotes_${ccy}`,{});
+    const savedQuotes = {};  // quotes are session-only
     setQuotes(savedQuotes);
     setLog(savedLog);
     setReferred(stored?.referred || new Set());
