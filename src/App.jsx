@@ -2568,9 +2568,9 @@ function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatfor
             const isDW = r.platform_identifier === "DWSF";
             let nettBp;
             if (isPaired && isDW) {
-              // Dealerweb: each leg carries its own premium (/100 adj), sum for nett
-              const p = notl>0 ? payPrem/notl*100 : 0;
-              const rc = notl>0 ? rcvPrem/notl*100 : 0;
+              // Dealerweb: each leg carries its own premium, sum for nett; strike /100
+              const p = notl>0 ? payPrem/notl*10000 : 0;
+              const rc = notl>0 ? rcvPrem/notl*10000 : 0;
               nettBp = Math.round((p+rc)*100)/100;
             } else if (isPaired) {
               // All other brokers: each leg carries FULL straddle premium (double-published)
@@ -2579,8 +2579,9 @@ function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatfor
               // Single leg (unpaired Payer/Receiver/other)
               nettBp = notl>0 ? Math.round(payPrem/notl*1e6)/100 : 0;
             }
-            flash[k] = { notional: r.notional_leg1, rate: r.strike_pct,
-              rcvrStrike: r._rcvrStrike||null,
+            const strikeAdj = isDW ? 100 : 1;
+            flash[k] = { notional: r.notional_leg1, rate: r.strike_pct ? r.strike_pct/strikeAdj : r.strike_pct,
+              rcvrStrike: r._rcvrStrike ? r._rcvrStrike/strikeAdj : null,
               nettBp, venue: r.platform_identifier,
               type: typeLabel(r.option_type_decoded), ts };
           }
