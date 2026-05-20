@@ -2317,7 +2317,8 @@ function CfOtmStrikePanel({ cfQuotes, cfRef, ccy, visStrikes, otmView, setOtmVie
           ))
         }
       </div>
-      {
+
+      <div style={{padding:"5px 10px",borderTop:"1px solid #1e3450",fontSize:8,color:"#1e3048",letterSpacing:".07em",flexShrink:0}}>OTM · INDICATIVE ONLY</div>
       {sdrHover&&createPortal(<div style={{position:"fixed",left:Math.min(sdrHover.x+12,window.innerWidth-200),top:Math.max(sdrHover.y-10,10),zIndex:99999,background:"rgba(8,12,24,.97)",border:"1px solid rgba(255,140,0,.6)",borderRadius:4,padding:"8px 12px",pointerEvents:"none",minWidth:160,boxShadow:"0 4px 20px rgba(0,0,0,.6)"}}>
         <div style={{color:"#ff9040",fontSize:9,fontWeight:700,marginBottom:5}}>{sdrHover.sdr.type}</div>
         {[["Notional",sdrHover.sdr.notional?(+sdrHover.sdr.notional/1e6).toFixed(0)+"M":"—"],
@@ -2332,10 +2333,9 @@ function CfOtmStrikePanel({ cfQuotes, cfRef, ccy, visStrikes, otmView, setOtmVie
           </div>
         ))}
       </div>,document.body)}
-
-      <div style={{padding:"5px 10px",borderTop:"1px solid #1e3450",fontSize:8,color:"#1e3048",letterSpacing:".07em",flexShrink:0}}>OTM · INDICATIVE ONLY</div>
     </div>
   );
+
 }
 
 // ── CF Log Panel (extracted) ──────────────────────────────────────
