@@ -1,6 +1,5 @@
 // RateEdge vol-blotter 0704d
 import React, { useState, useCallback, useRef, useEffect } from "react";
-import { createPortal } from "react-dom";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL  || "";
@@ -2319,20 +2318,7 @@ function CfOtmStrikePanel({ cfQuotes, cfRef, ccy, visStrikes, otmView, setOtmVie
       </div>
 
       <div style={{padding:"5px 10px",borderTop:"1px solid #1e3450",fontSize:8,color:"#1e3048",letterSpacing:".07em",flexShrink:0}}>OTM · INDICATIVE ONLY</div>
-      {sdrHover&&createPortal(<div style={{position:"fixed",left:Math.min(sdrHover.x+12,window.innerWidth-200),top:Math.max(sdrHover.y-10,10),zIndex:99999,background:"rgba(8,12,24,.97)",border:"1px solid rgba(255,140,0,.6)",borderRadius:4,padding:"8px 12px",pointerEvents:"none",minWidth:160,boxShadow:"0 4px 20px rgba(0,0,0,.6)"}}>
-        <div style={{color:"#ff9040",fontSize:9,fontWeight:700,marginBottom:5}}>{sdrHover.sdr.type}</div>
-        {[["Notional",sdrHover.sdr.notional?(+sdrHover.sdr.notional/1e6).toFixed(0)+"M":"—"],
-          ["Nett Prem",sdrHover.sdr.prem!=null?(+sdrHover.sdr.prem).toFixed(2)+"bp":"—"],
-          ["Strike",sdrHover.sdr.rate?(+sdrHover.sdr.rate*100).toFixed(3)+"%":"—"],
-          ["Venue",({"BGCD":"BGC","TPSE":"Tullett Prebon","ISWV":"ICAP (V)","IGDL":"ICAP","TWSF":"Tradition","TSEF":"Tradition","GSEF":"GFI","DWSF":"Dealerweb","BILT":"Bilateral","XXXX":"Bilateral"})[sdrHover.sdr.venue]||sdrHover.sdr.venue||"—"],
-          ["Age",Math.round((Date.now()-sdrHover.sdr.ts)/60000)+"m ago"]
-        ].map(([l,v])=>(
-          <div key={l} style={{display:"flex",justifyContent:"space-between",gap:16,fontSize:8,marginBottom:2}}>
-            <span style={{color:"#5a6080"}}>{l}</span>
-            <span style={{color:l==="Nett Prem"?"#60d0a0":"#c0c8d0",fontWeight:700}}>{v}</span>
-          </div>
-        ))}
-      </div>,document.body)}
+      
     </div>
   );
 
@@ -2849,6 +2835,24 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem("vbl_sdr_type",   JSON.stringify(sdrFilterType));     } catch {} }, [sdrFilterType]);
   useEffect(() => { try { localStorage.setItem("vbl_sdr_venue",  JSON.stringify(sdrFilterPlatform)); } catch {} }, [sdrFilterPlatform]);
   useEffect(() => { try { localStorage.setItem("vbl_sdr_action", JSON.stringify(sdrFilterAction));   } catch {} }, [sdrFilterAction]);
+
+  // SDR hover tooltip via direct DOM (bypasses React portals/CSS clipping)
+  useEffect(() => {
+    let el = document.getElementById('__sdrTip');
+    if (!el) { el = document.createElement('div'); el.id = '__sdrTip'; document.body.appendChild(el); }
+    if (!sdrHover) { el.style.display='none'; return; }
+    const s = sdrHover.sdr;
+    const PN = {"BGCD":"BGC","TPSE":"Tullett Prebon","ISWV":"ICAP (V)","IGDL":"ICAP","TWSF":"Tradition","TSEF":"Tradition","GSEF":"GFI","DWSF":"Dealerweb","BILT":"Bilateral","XXXX":"Bilateral"};
+    const rows = [
+      ['Notional', s.notional ? (+s.notional/1e6).toFixed(0)+'M' : '—'],
+      ['Nett Prem', s.prem != null ? (+s.prem).toFixed(2)+'bp' : '—'],
+      ['Strike', s.rate ? (+s.rate*100).toFixed(3)+'%' : '—'],
+      ['Venue', PN[s.venue]||s.venue||'—'],
+      ['Age', Math.round((Date.now()-s.ts)/60000)+'m ago']
+    ];
+    el.style.cssText = 'position:fixed;left:'+Math.min(sdrHover.x+12,window.innerWidth-200)+'px;top:'+Math.max(sdrHover.y-10,10)+'px;z-index:2147483647;background:rgba(8,12,24,.97);border:1px solid rgba(255,140,0,.6);border-radius:4px;padding:8px 12px;pointer-events:none;min-width:160px;box-shadow:0 4px 20px rgba(0,0,0,.8);font-family:monospace;display:block;';
+    el.innerHTML = '<div style="color:#ff9040;font-size:9px;font-weight:700;margin-bottom:5px">'+(s.type||'SDR')+'</div>'+rows.map(([l,v])=>'<div style="display:flex;justify-content:space-between;gap:16px;font-size:8px;margin-bottom:2px"><span style="color:#5a6080">'+l+'</span><span style="color:'+(l==='Nett Prem'?'#60d0a0':'#c0c8d0')+';font-weight:700">'+v+'</span></div>').join('');
+  }, [sdrHover]);
 
   // Rebuild SDR flash when filters change
   useEffect(() => {
