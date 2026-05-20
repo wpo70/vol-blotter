@@ -2866,11 +2866,17 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem("vbl_sdr_action", JSON.stringify(sdrFilterAction));   } catch {} }, [sdrFilterAction]);
   // Document-level SDR hover via data attribute
   useEffect(() => {
+    let currentKey = null;
     const fn = e => {
       const el = e.target && e.target.closest ? e.target.closest("[data-sdrkey]") : null;
       const k = el ? el.getAttribute("data-sdrkey") : null;
-      if (k) { const s=sdrFlashRef.current[k]; if(s){setSdrHover({sdr:s,x:e.clientX,y:e.clientY});return;} }
-      setSdrHover(null);
+      if (k && k !== currentKey) {
+        currentKey = k;
+        const s = sdrFlashRef.current[k];
+        if (s) { setSdrHover({sdr:s, x:e.clientX, y:e.clientY}); return; }
+      }
+      if (!k && currentKey) { currentKey = null; setSdrHover(null); }
+      if (k && currentKey === k) setSdrHover(h => h ? {...h, x:e.clientX, y:e.clientY} : h);
     };
     document.addEventListener("mousemove", fn);
     return () => document.removeEventListener("mousemove", fn);
