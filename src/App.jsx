@@ -3561,8 +3561,8 @@ export default function App() {
                     return (
                       <td key={ten} className="hv"
                         onClick={()=>!isActive && openCell(exp,ten)}
-                        onMouseEnter={e=>{setHoveredCell(k);const _wf=(window.__sdrFlash||{});const _ws=_wf[k];if(_ws&&Date.now()-_ws.ts<86400000){setSdrHover({sdr:_ws,x:e.clientX,y:e.clientY});}}}
-                        onMouseLeave={()=>{setHoveredCell(null);setSdrHover(null);}}
+                        onMouseEnter={e=>{setHoveredCell(k);const _wf=(window.__sdrFlash||{});const _ws=_wf[k];console.log("[HOVER]",k,"flash keys:",Object.keys(_wf).length,"hit:",!!_ws);if(_ws&&Date.now()-_ws.ts<86400000){setSdrHover({sdr:_ws,x:e.clientX,y:e.clientY});}}}
+                        onMouseLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget)){setHoveredCell(null);setSdrHover(null);}}}
                         style={{background:bg,border:`1px solid ${bdr}`,padding:"2px 2px",position:"relative",transition:"background .1s",cursor:"pointer",minWidth:88,verticalAlign:"top"}}>
 
                         {isActive ? (
