@@ -2316,9 +2316,38 @@ function CfOtmStrikePanel({ cfQuotes, cfRef, ccy, visStrikes, otmView, setOtmVie
           ))
         }
       </div>
-      {sdrHover&&<div style={{position:"fixed",left:sdrHover.x+12,top:sdrHover.y-10,zIndex:99999,background:"red",color:"white",padding:"8px",borderRadius:4,pointerEvents:"none",fontSize:12}}>
-        SDR: {sdrHover.sdr?.type} {sdrHover.sdr?.notional?(+sdrHover.sdr.notional/1e6).toFixed(0)+"M":""}
+      {sdrHover&&(()=>{
+        const {sdr,x,y}=sdrHover;
+        const PN={"BGCD":"BGC","TWSF":"Tradition","TSEF":"Tradition","TPSE":"Tullett Prebon","IGDL":"ICAP","ISWE":"ICAP (E)","ISWV":"ICAP (V)","GSEF":"GFI","DWSF":"Dealerweb","ICSE":"ICE","BILT":"Bilateral","XXXX":"Bilateral"};
+        const notional = sdr.notional ? (+sdr.notional>=1e9?(+sdr.notional/1e9).toFixed(1)+"B":(+sdr.notional/1e6).toFixed(0)+"M") : "—";
+        const prem = sdr.prem!=null ? (+sdr.prem).toFixed(2)+"bp" : "—";
+        const strike = sdr.rate ? (+sdr.rate*100).toFixed(3)+"%" : "—";
+        const venue = PN[sdr.venue]||sdr.venue||"—";
+        const age = Math.round((Date.now()-sdr.ts)/60000);
+        return <div style={{position:"fixed",left:Math.min(x+12,window.innerWidth-180),top:Math.max(y-10,10),zIndex:9999,background:"rgba(8,12,24,.97)",border:"1px solid rgba(255,140,0,.5)",borderRadius:4,padding:"8px 12px",pointerEvents:"none",minWidth:160}}>
+          <div style={{color:"#ff9040",fontSize:9,fontWeight:700,marginBottom:5}}>{sdr.type}</div>
+          {[["Notional",notional],["Nett Prem",prem],["Strike",strike],["Venue",venue],["Age",age+"m ago"]].map(([l,v])=>(
+            <div key={l} style={{display:"flex",justifyContent:"space-between",gap:16,fontSize:8,marginBottom:2}}>
+              <span style={{color:"#5a6080"}}>{l}</span>
+              <span style={{color:l==="Nett Prem"?"#60d0a0":"#c0c8d0",fontWeight:700}}>{v}</span>
+            </div>))}
+        </div>;
+      })()}
+      {sdrHover&&<div style={{position:"fixed",left:Math.min(sdrHover.x+12,window.innerWidth-200),top:Math.max(sdrHover.y-10,10),zIndex:99999,background:"rgba(8,12,24,.97)",border:"1px solid rgba(255,140,0,.6)",borderRadius:4,padding:"8px 12px",pointerEvents:"none",minWidth:160,boxShadow:"0 4px 20px rgba(0,0,0,.6)"}}>
+        <div style={{color:"#ff9040",fontSize:9,fontWeight:700,marginBottom:5}}>{sdrHover.sdr.type}</div>
+        {[["Notional",sdrHover.sdr.notional?(+sdrHover.sdr.notional/1e6).toFixed(0)+"M":"—"],
+          ["Nett Prem",sdrHover.sdr.prem!=null?(+sdrHover.sdr.prem).toFixed(2)+"bp":"—"],
+          ["Strike",sdrHover.sdr.rate?(+sdrHover.sdr.rate*100).toFixed(3)+"%":"—"],
+          ["Venue",({"BGCD":"BGC","TPSE":"Tullett Prebon","ISWV":"ICAP (V)","IGDL":"ICAP","TWSF":"Tradition","TSEF":"Tradition","GSEF":"GFI","DWSF":"Dealerweb","BILT":"Bilateral","XXXX":"Bilateral"})[sdrHover.sdr.venue]||sdrHover.sdr.venue||"—"],
+          ["Age",Math.round((Date.now()-sdrHover.sdr.ts)/60000)+"m ago"]
+        ].map(([l,v])=>(
+          <div key={l} style={{display:"flex",justifyContent:"space-between",gap:16,fontSize:8,marginBottom:2}}>
+            <span style={{color:"#5a6080"}}>{l}</span>
+            <span style={{color:l==="Nett Prem"?"#60d0a0":"#c0c8d0",fontWeight:700}}>{v}</span>
+          </div>
+        ))}
       </div>}
+
       <div style={{padding:"5px 10px",borderTop:"1px solid #1e3450",fontSize:8,color:"#1e3048",letterSpacing:".07em",flexShrink:0}}>OTM · INDICATIVE ONLY</div>
     </div>
   );
@@ -2591,7 +2620,6 @@ export default function App() {
   const [filterMins, setFilterMins]       = useState(null);
   const [sortDir,    setSortDir]          = useState("desc");
   const [sdrFlash, setSdrFlash] = useState({});
-  const sdrFlashRef = React.useRef({});
   const [sdrHover, setSdrHover] = useState(null);
   const [sdrRawData, setSdrRawData] = useState([]);
   const sdrManualPollRef = React.useRef(null);
@@ -2834,12 +2862,11 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem("vbl_sdr_type",   JSON.stringify(sdrFilterType));     } catch {} }, [sdrFilterType]);
   useEffect(() => { try { localStorage.setItem("vbl_sdr_venue",  JSON.stringify(sdrFilterPlatform)); } catch {} }, [sdrFilterPlatform]);
   useEffect(() => { try { localStorage.setItem("vbl_sdr_action", JSON.stringify(sdrFilterAction));   } catch {} }, [sdrFilterAction]);
-  useEffect(() => { sdrFlashRef.current = sdrFlash; }, [sdrFlash]);
   // Rebuild SDR flash when filters change
   useEffect(() => {
     if (!sdrRawData.length) return;
     const flash = buildSdrFlash(sdrRawData, sdrFilterAction, sdrFilterType, sdrFilterPlatform);
-    setSdrFlash(flash);
+    window.__sdrFlash=flash; setSdrFlash(flash);
   }, [sdrFilterAction, sdrFilterType, sdrFilterPlatform, sdrRawData]);
 
   // SDR trade poll
@@ -3008,8 +3035,8 @@ export default function App() {
     try { localStorage.setItem(`vbl_quotes_${activeCcy}`, JSON.stringify(quotes)); } catch {}
     // load new ccy state - from memory first, then localStorage
     const stored = ccyStore[ccy];
-    const savedLog = stored?.log?.length ? stored.log : (loadLS(`vbl_log4_${ccy}`,[]).map(l=>({...l,ts:new Date(l.ts)})));
-    const savedQuotes = stored?.quotes && Object.keys(stored.quotes).length ? stored.quotes : (loadLS(`vbl_quotes_${ccy}`,{}));
+    const savedLog = loadLS(`vbl_log4_${ccy}`,[]).map(l=>({...l,ts:new Date(l.ts)}));
+    const savedQuotes = loadLS(`vbl_quotes_${ccy}`,{});
     setQuotes(savedQuotes);
     setLog(savedLog);
     setReferred(stored?.referred || new Set());
@@ -3593,7 +3620,7 @@ export default function App() {
                             </div>
                           </div>
                         ) : (
-                          <div onMouseEnter={e=>{const _s=sdrFlashRef.current[k];if(_s&&Date.now()-_s.ts<86400000)setSdrHover({sdr:_s,x:e.clientX,y:e.clientY});}} style={{display:"flex",flexDirection:"column",padding:"2px 3px",gap:0,minHeight:22}}>
+                          <div onMouseEnter={e=>{const _s=(window.__sdrFlash||{})[k];if(_s){setSdrHover({sdr:_s,x:e.clientX,y:e.clientY});}else{setHoveredCell(k);}}} style={{display:"flex",flexDirection:"column",padding:"2px 3px",gap:0,minHeight:22}}>
                             {isHov && <div style={{textAlign:"center",color:"#3a80b8",fontSize:7,marginBottom:1}}>fwd {FWD[exp]?.[ti]?.toFixed(3)??"--"}%</div>}
                             <div style={{textAlign:"center",color:(hasBid||hasOff)?"#508090":"#68a0ba",fontSize:(hasBid||hasOff)?8:11,fontWeight:(hasBid||hasOff)?400:500,opacity:(hasBid||hasOff)?.45:1,marginBottom:(hasBid||hasOff)?1:0}}>
                               {dispMid ?? "--"}
