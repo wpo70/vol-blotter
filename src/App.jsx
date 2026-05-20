@@ -3560,8 +3560,9 @@ export default function App() {
 
                     return (
                       <td key={ten} className="hv"
+                        data-sdr={(_sdr&&_sdrAge<86400000)?JSON.stringify(_sdr):null}
                         onClick={()=>!isActive && openCell(exp,ten)}
-                        onMouseEnter={e=>{setHoveredCell(k);const _wf=(window.__sdrFlash||{});const _ws=_wf[k];console.log("[HOVER]",k,"flash keys:",Object.keys(_wf).length,"hit:",!!_ws);if(_ws&&Date.now()-_ws.ts<86400000){setSdrHover({sdr:_ws,x:e.clientX,y:e.clientY});}}}
+                        onMouseEnter={e=>{setHoveredCell(k);try{const _d=e.currentTarget.getAttribute("data-sdr");if(_d){const _s=JSON.parse(_d);setSdrHover({sdr:_s,x:e.clientX,y:e.clientY});}}catch(err){}}}
                         onMouseLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget)){setHoveredCell(null);setSdrHover(null);}}}
                         style={{background:bg,border:`1px solid ${bdr}`,padding:"2px 2px",position:"relative",transition:"background .1s",cursor:"pointer",minWidth:88,verticalAlign:"top"}}>
 
