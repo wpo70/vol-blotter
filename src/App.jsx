@@ -2910,6 +2910,7 @@ export default function App() {
         if (!sdrData?.length) return;
         const flash = buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatform);
         setSdrRawData(sdrData);
+        window.__sdrFlash=flash;
         setSdrFlash(flash);
 
         // Caps & floors: CALL/PUT with null swp_tenor
