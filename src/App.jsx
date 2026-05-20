@@ -2864,23 +2864,7 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem("vbl_sdr_type",   JSON.stringify(sdrFilterType));     } catch {} }, [sdrFilterType]);
   useEffect(() => { try { localStorage.setItem("vbl_sdr_venue",  JSON.stringify(sdrFilterPlatform)); } catch {} }, [sdrFilterPlatform]);
   useEffect(() => { try { localStorage.setItem("vbl_sdr_action", JSON.stringify(sdrFilterAction));   } catch {} }, [sdrFilterAction]);
-  // Document-level SDR hover via data attribute
-  useEffect(() => {
-    let currentKey = null;
-    const fn = e => {
-      const el = e.target && e.target.closest ? e.target.closest("[data-sdrkey]") : null;
-      const k = el ? el.getAttribute("data-sdrkey") : null;
-      if (k && k !== currentKey) {
-        currentKey = k;
-        const s = sdrFlashRef.current[k];
-        if (s) { setSdrHover({sdr:s, x:e.clientX, y:e.clientY}); return; }
-      }
-      if (!k && currentKey) { currentKey = null; setSdrHover(null); }
-      if (k && currentKey === k) setSdrHover(h => h ? {...h, x:e.clientX, y:e.clientY} : h);
-    };
-    document.addEventListener("mousemove", fn);
-    return () => document.removeEventListener("mousemove", fn);
-  }, []);
+
   // Rebuild SDR flash when filters change
   useEffect(() => {
     if (!sdrRawData.length) return;
@@ -3591,7 +3575,7 @@ export default function App() {
                     return (
                       <td key={ten} className="hv"
                         onClick={()=>!isActive && openCell(exp,ten)}
-                        onMouseEnter={()=>setHoveredCell(k)}
+                        onMouseEnter={e=>{setHoveredCell(k);if(sdrFlashRef.current[k]&&Date.now()-sdrFlashRef.current[k].ts<86400000){setSdrHover({sdr:sdrFlashRef.current[k],x:e.clientX,y:e.clientY});}}}
                         onMouseLeave={()=>{setHoveredCell(null);setSdrHover(null);}}
                         style={{background:bg,border:`1px solid ${bdr}`,padding:"2px 2px",position:"relative",transition:"background .1s",cursor:"pointer",minWidth:88,verticalAlign:"top"}}>
 
@@ -3639,7 +3623,7 @@ export default function App() {
                             </div>
                           </div>
                         ) : (
-                          <div onMouseEnter={e=>{const _s=(window.__sdrFlash||{})[k];if(_s){setSdrHover({sdr:_s,x:e.clientX,y:e.clientY});}else{setHoveredCell(k);}}} data-sdrkey={(_sdr&&_sdrAge<86400000)?k:undefined} style={{display:"flex",flexDirection:"column",padding:"2px 3px",gap:0,minHeight:22}}>
+                          <div onMouseEnter={e=>{const _s=(window.__sdrFlash||{})[k];if(_s){setSdrHover({sdr:_s,x:e.clientX,y:e.clientY});}else{setHoveredCell(k);}}} style={{display:"flex",flexDirection:"column",padding:"2px 3px",gap:0,minHeight:22}}>
                             {isHov && <div style={{textAlign:"center",color:"#3a80b8",fontSize:7,marginBottom:1}}>fwd {FWD[exp]?.[ti]?.toFixed(3)??"--"}%</div>}
                             <div style={{textAlign:"center",color:(hasBid||hasOff)?"#508090":"#68a0ba",fontSize:(hasBid||hasOff)?8:11,fontWeight:(hasBid||hasOff)?400:500,opacity:(hasBid||hasOff)?.45:1,marginBottom:(hasBid||hasOff)?1:0}}>
                               {dispMid ?? "--"}
