@@ -2559,6 +2559,7 @@ function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatfor
           if (!expKey || !tenKey) return;
           const k = `${expKey}|${tenKey}`;
           const ts = new Date(r.event_timestamp).getTime();
+          if (Date.now() - ts > 24*60*60*1000) return; // skip > 24hr old
             const notl = parseFloat(r.notional_leg1||0);
             const payPrem = parseFloat(r.premium_amount||0);
             const isPaired = !!r._paired;
@@ -2610,6 +2611,7 @@ export default function App() {
   const [sortDir,    setSortDir]          = useState("desc");
   const [sdrFlash, setSdrFlash] = useState({});
   const [sdrHover, setSdrHover] = useState(null);
+  const sdrDismissRef = useRef(null);
   const sdrFlashRef = React.useRef({});
   const [sdrRawData, setSdrRawData] = useState([]);
   const sdrManualPollRef = React.useRef(null);
@@ -2878,8 +2880,10 @@ export default function App() {
         return '<div style="display:flex;justify-content:space-between;gap:16px;font-size:8px;margin-bottom:2px"><span style="color:#5a6080">'+l+'</span><span style="color:'+c+';font-weight:'+(l==='Nett Prem'?'700':'500')+'">'+v+'</span></div>';
       }).join('');
     }).join('');
-    el.style.cssText = 'position:fixed;left:'+Math.min(sdrHover.x+12,window.innerWidth-220)+'px;top:'+Math.max(sdrHover.y-10,10)+'px;z-index:2147483647;background:rgba(8,12,24,.97);border:1px solid rgba(255,140,0,.6);border-radius:4px;padding:8px 12px;pointer-events:none;min-width:170px;max-height:400px;overflow-y:auto;box-shadow:0 4px 20px rgba(0,0,0,.8);font-family:monospace;display:block;';
+    el.style.cssText = 'position:fixed;left:'+Math.min(sdrHover.x+12,window.innerWidth-220)+'px;top:'+Math.max(sdrHover.y-10,10)+'px;z-index:2147483647;background:rgba(8,12,24,.97);border:1px solid rgba(255,140,0,.6);border-radius:4px;padding:8px 12px;pointer-events:auto;min-width:170px;max-height:400px;overflow-y:auto;box-shadow:0 4px 20px rgba(0,0,0,.8);font-family:monospace;display:block;';
     el.innerHTML = tradeHtml;
+    el.onmouseenter = () => { clearTimeout(sdrDismissRef.current); };
+    el.onmouseleave = () => { setSdrHover(null); };
   }, [sdrHover]);
 
   // Rebuild SDR flash when filters change
@@ -3595,8 +3599,8 @@ export default function App() {
                       <td key={ten} className="hv"
                         data-sdr={(_sdr&&_sdrAge<86400000)?JSON.stringify(_sdrArr):null}
                         onClick={()=>!isActive && openCell(exp,ten)}
-                        onMouseEnter={e=>{setHoveredCell(k);try{const _d=e.currentTarget.getAttribute("data-sdr");if(_d){const _a=JSON.parse(_d);setSdrHover({trades:_a,x:e.clientX,y:e.clientY});}}catch(err){}}}
-                        onMouseLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget)){setHoveredCell(null);setSdrHover(null);}}}
+                        onMouseEnter={e=>{clearTimeout(sdrDismissRef.current);setHoveredCell(k);try{const _d=e.currentTarget.getAttribute("data-sdr");if(_d){const _a=JSON.parse(_d);setSdrHover({trades:_a,x:e.clientX,y:e.clientY});}}catch(err){}}}
+                        onMouseLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget)){setHoveredCell(null);clearTimeout(sdrDismissRef.current);sdrDismissRef.current=setTimeout(()=>setSdrHover(null),150);}}}
                         style={{background:bg,border:`1px solid ${bdr}`,padding:"2px 2px",position:"relative",transition:"background .1s",cursor:"pointer",minWidth:88,verticalAlign:"top"}}>
 
                         {isActive ? (
@@ -3643,7 +3647,7 @@ export default function App() {
                             </div>
                           </div>
                         ) : (
-                          <div onMouseEnter={e=>{const _a=(window.__sdrFlash||{})[k];if(_a&&_a.length){setSdrHover({trades:_a,x:e.clientX,y:e.clientY});}else{setHoveredCell(k);}}} style={{display:"flex",flexDirection:"column",padding:"2px 3px",gap:0,minHeight:22}}>
+                          <div onMouseEnter={e=>{clearTimeout(sdrDismissRef.current);const _a=(window.__sdrFlash||{})[k];if(_a&&_a.length){setSdrHover({trades:_a,x:e.clientX,y:e.clientY});}else{setHoveredCell(k);}}} style={{display:"flex",flexDirection:"column",padding:"2px 3px",gap:0,minHeight:22}}>
                             {isHov && <div style={{textAlign:"center",color:"#3a80b8",fontSize:7,marginBottom:1}}>fwd {FWD[exp]?.[ti]?.toFixed(3)??"--"}%</div>}
                             <div style={{textAlign:"center",color:(hasBid||hasOff)?"#508090":"#68a0ba",fontSize:(hasBid||hasOff)?8:11,fontWeight:(hasBid||hasOff)?400:500,opacity:(hasBid||hasOff)?.45:1,marginBottom:(hasBid||hasOff)?1:0}}>
                               {dispMid ?? "--"}
