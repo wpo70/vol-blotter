@@ -2904,19 +2904,21 @@ export default function App() {
         }
       }
 
-      // Counter: show direct prices on L1 grid
+      // Counter: legged prices from outrights, fallback to counter direct if no outrights
       if (cntr.bid != null) {
-        addM(l1.exp, l1.ten, "bid", cntr.bid, cBk);
-      }
-      if (cntr.offer != null) {
-        addM(l1.exp, l1.ten, "offer", cntr.offer, cBk);
-      }
-      if (cntr.bid != null) {
-        if (l0Live.liveBid != null) addM(l1.exp, l1.ten, "bid", +(cntr.bid + (l0Live.liveBid - l0.spxN) * R).toFixed(4), l0Live.liveBidBank||bk);
+        if (l0Live.liveBid != null) {
+          addM(l1.exp, l1.ten, "bid", +(cntr.bid + (l0Live.liveBid - l0.spxN) * R).toFixed(4), l0Live.liveBidBank||bk);
+        } else {
+          addM(l1.exp, l1.ten, "bid", cntr.bid, cBk);
+        }
         if (l1Live.liveOffer != null) addM(l0.exp, l0.ten, "offer", +(l0.spxN + (l1Live.liveOffer - cntr.bid) / R).toFixed(4), l1Live.liveOfferBank||cBk);
       }
       if (cntr.offer != null) {
-        if (l0Live.liveOffer != null) addM(l1.exp, l1.ten, "offer", +(cntr.offer + (l0Live.liveOffer - l0.spxN) * R).toFixed(4), l0Live.liveOfferBank||bk);
+        if (l0Live.liveOffer != null) {
+          addM(l1.exp, l1.ten, "offer", +(cntr.offer + (l0Live.liveOffer - l0.spxN) * R).toFixed(4), l0Live.liveOfferBank||bk);
+        } else {
+          addM(l1.exp, l1.ten, "offer", cntr.offer, cBk);
+        }
         if (l1Live.liveBid != null) addM(l0.exp, l0.ten, "bid", +(l0.spxN + (l1Live.liveBid - cntr.offer) / R).toFixed(4), l1Live.liveBidBank||cBk);
       }
     });
@@ -4090,31 +4092,27 @@ export default function App() {
                   }
                 }
 
-                // Counter — show direct prices on L1 grid
+                // Counter — legged prices, fallback to counter direct if no outrights
                 if(cBid!=null){
-                  addImp(l1.exp,l1.ten,"bid",cBid,cBk);
-                }
-                if(cOff!=null){
-                  addImp(l1.exp,l1.ten,"offer",cOff,cBk);
-                }
-                if(cBid!=null&&cOff!=null){
-                  rows.push({lbl:`SPRD ${cBid}/${cOff} ${cBk||""}`,val:`${cBid}/${cOff}`,side:"bid",bank:cBk,counter:true});
-                }
-                if(cBid!=null){
-                  // Legged L1 bid from live L0 bid — L0 bid bank
                   if(l0.liveBid!=null){
                     const l1v=+(cBid+(l0.liveBid-l0.spxN)*R).toFixed(4);
                     rows.push({lbl:`${l0.exp}${l0.ten} ${l0.liveBid}b → ${l1.exp}${l1.ten}`,val:l1v,side:"bid",bank:l0.liveBidBank||bk,counter:true});
                     addImp(l1.exp,l1.ten,"bid",l1v,l0.liveBidBank||bk);
+                  } else {
+                    addImp(l1.exp,l1.ten,"bid",cBid,cBk);
                   }
                 }
                 if(cOff!=null){
-                  // Legged L1 offer from live L0 offer — L0 offer bank
                   if(l0.liveOffer!=null){
                     const l1v=+(cOff+(l0.liveOffer-l0.spxN)*R).toFixed(4);
                     rows.push({lbl:`${l0.exp}${l0.ten} ${l0.liveOffer}o → ${l1.exp}${l1.ten}`,val:l1v,side:"offer",bank:l0.liveOfferBank||bk,counter:true});
                     addImp(l1.exp,l1.ten,"offer",l1v,l0.liveOfferBank||bk);
+                  } else {
+                    addImp(l1.exp,l1.ten,"offer",cOff,cBk);
                   }
+                }
+                if(cBid!=null&&cOff!=null){
+                  rows.push({lbl:`SPRD ${cBid}/${cOff} ${cBk||""}`,val:`${cBid}/${cOff}`,side:"bid",bank:cBk,counter:true});
                 }
                 // Outright L1 quotes → implied L0 — L1 quote bank
                 if(cBid!=null&&l1.liveOffer!=null){
