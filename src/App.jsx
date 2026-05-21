@@ -2900,14 +2900,12 @@ export default function App() {
         if (l1Live.liveOffer != null) addM(l0.exp, l0.ten, "offer", +(l0.spxN + (l1Live.liveOffer - l1.spxN) / R).toFixed(4), bk);
       }
 
-      // Counter: L1 prices → L0 implied + legged L1 from live L0 + outright L1 → L0
+      // Counter: L1 reference — legged from live L0, outright L1 → L0
       if (cntr.bid != null) {
-        addM(l0.exp, l0.ten, "bid", +(l0.spxN + (cntr.bid - l1.spxN) / R).toFixed(4), cBk);
         if (l0Live.liveBid != null) addM(l1.exp, l1.ten, "bid", +(cntr.bid + (l0Live.liveBid - l0.spxN) * R).toFixed(4), cBk);
         if (l1Live.liveOffer != null) addM(l0.exp, l0.ten, "offer", +(l0.spxN + (l1Live.liveOffer - cntr.bid) / R).toFixed(4), cBk);
       }
       if (cntr.offer != null) {
-        addM(l0.exp, l0.ten, "offer", +(l0.spxN + (cntr.offer - l1.spxN) / R).toFixed(4), cBk);
         if (l0Live.liveOffer != null) addM(l1.exp, l1.ten, "offer", +(cntr.offer + (l0Live.liveOffer - l0.spxN) * R).toFixed(4), cBk);
         if (l1Live.liveBid != null) addM(l0.exp, l0.ten, "bid", +(l0.spxN + (l1Live.liveBid - cntr.offer) / R).toFixed(4), cBk);
       }
@@ -4054,12 +4052,8 @@ export default function App() {
                   }
                 }
 
-                // Counter — inputs are L1 prices (counterparty bid/offer on L1)
+                // Counter — inputs are L1 prices, used as reference for legged calcs
                 if(cBid!=null){
-                  // Counter bid on L1 → implied L0 bid
-                  const l0v=+(l0.spxN+(cBid-l1.spxN)/R).toFixed(4);
-                  rows.push({lbl:`CNTR ${cBid}b${cBk?" "+cBk:""} → ${l0.exp}${l0.ten}`,val:l0v,side:"bid",bank:cBk,counter:true});
-                  addImp(l0.exp,l0.ten,"bid",l0v);
                   addImp(l1.exp,l1.ten,"bid",cBid);
                   // Legged L1 bid from live L0 bid
                   if(l0.liveBid!=null){
@@ -4069,10 +4063,6 @@ export default function App() {
                   }
                 }
                 if(cOff!=null){
-                  // Counter offer on L1 → implied L0 offer
-                  const l0v=+(l0.spxN+(cOff-l1.spxN)/R).toFixed(4);
-                  rows.push({lbl:`CNTR ${cOff}o${cBk?" "+cBk:""} → ${l0.exp}${l0.ten}`,val:l0v,side:"offer",bank:cBk,counter:true});
-                  addImp(l0.exp,l0.ten,"offer",l0v);
                   addImp(l1.exp,l1.ten,"offer",cOff);
                   // Legged L1 offer from live L0 offer
                   if(l0.liveOffer!=null){
