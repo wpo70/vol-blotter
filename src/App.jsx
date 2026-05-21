@@ -711,7 +711,7 @@ function WedgePanel({ spreadImplied={}, ccy, wedgeQuotes, wedgeRef, wedgeLog=[],
     const cell = swpQuotes[k]; if(!cell) return {bid:null,offer:null,bidBank:null,offerBank:null};
     const actB = cell.bids.filter(q=>!swpReferred?.has(`${k}|bids|${q.id}`));
     const actO = cell.offers.filter(q=>!swpReferred?.has(`${k}|offers|${q.id}`));
-    const rawBid=actB[0]?.price??null;const rawOffer=actO[0]?.price??null;const spr=spreadImplied[`${exp}|${ten}`];const bid=(spr?.bid!=null&&(rawBid==null||spr.bid>rawBid))?spr.bid:rawBid;const offer=(spr?.offer!=null&&(rawOffer==null||spr.offer<rawOffer))?spr.offer:rawOffer;return { bid, bidBank:actB[0]?.bank??null, offer:actO[0]?.price??null, offerBank:actO[0]?.bank??null };
+    const rawBid=actB[0]?.price??null;const rawOffer=actO[0]?.price??null;const spr=spreadImplied[`${exp}|${ten}`];const bid=(spr?.bid!=null&&(rawBid==null||spr.bid>rawBid))?spr.bid:rawBid;const offer=(spr?.offer!=null&&(rawOffer==null||spr.offer<rawOffer))?spr.offer:rawOffer;const bidBank=(bid===spr?.bid&&spr?.bidBank)?spr.bidBank:actB[0]?.bank??null;const offerBank=(offer===spr?.offer&&spr?.offerBank)?spr.offerBank:actO[0]?.bank??null;return { bid, bidBank, offer, offerBank };
   };
   // Get published wedge mid for a row (from Supabase blotter_mids via liveWedgeMids)
   // Map WEDGE_ROW id -> blotter_mids key (pricer publishes as wedge_cf_spr_XXXX)
