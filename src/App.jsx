@@ -2904,12 +2904,10 @@ export default function App() {
 
       // Counter: L1 reference — direct prices, legged from live L0 (spread bank), outright L1 → L0 (counter bank)
       if (cntr.bid != null) {
-        addM(l1.exp, l1.ten, "bid", cntr.bid, cBk);
         if (l0Live.liveBid != null) addM(l1.exp, l1.ten, "bid", +(cntr.bid + (l0Live.liveBid - l0.spxN) * R).toFixed(4), bk);
         if (l1Live.liveOffer != null) addM(l0.exp, l0.ten, "offer", +(l0.spxN + (l1Live.liveOffer - cntr.bid) / R).toFixed(4), cBk);
       }
       if (cntr.offer != null) {
-        addM(l1.exp, l1.ten, "offer", cntr.offer, cBk);
         if (l0Live.liveOffer != null) addM(l1.exp, l1.ten, "offer", +(cntr.offer + (l0Live.liveOffer - l0.spxN) * R).toFixed(4), bk);
         if (l1Live.liveBid != null) addM(l0.exp, l0.ten, "bid", +(l0.spxN + (l1Live.liveBid - cntr.offer) / R).toFixed(4), cBk);
       }
@@ -3401,6 +3399,12 @@ export default function App() {
     });
   };
 
+  const CCY_TZ = {AUD:"Australia/Sydney",USD:"America/New_York",EUR:"Europe/London",JPY:"Asia/Tokyo"};
+  const mktTz = CCY_TZ[activeCcy]||"Australia/Sydney";
+  const mktTime = now.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit",second:"2-digit",timeZone:mktTz});
+  const mktHr = parseInt(now.toLocaleString("en-GB",{hour:"numeric",hour12:false,timeZone:mktTz}));
+  const mktLive = mktHr >= 7 && mktHr < 18;
+  const mktLabel = {AUD:"AEST",USD:"EST",EUR:"LDN",JPY:"JST"}[activeCcy]||"";
   const ts  = now.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
 
   return (
@@ -3476,8 +3480,9 @@ export default function App() {
             style={{background:copiedEOD?"rgba(120,80,20,.4)":"rgba(20,50,80,.5)",border:`1px solid ${copiedEOD?"rgba(200,150,40,.5)":"#2e4e78"}`,color:copiedEOD?"#e0b040":"#5a96c8",padding:"3px 10px",borderRadius:3,cursor:"pointer",fontSize:9,fontFamily:"inherit",letterSpacing:".08em",transition:"all .2s"}}>
             {copiedEOD?"COPIED ✓":"EOD"}
           </button>
+          <span style={{color:mktLive?"#40c070":"#a04040",fontSize:9,fontWeight:700}}>{mktLive?"LIVE":"EBD"}</span>
           <span style={{color:"#4a7898",fontSize:9}}>INDICATIVE ONLY</span>
-          <span style={{color:"#305870",fontSize:11}}>{ts}</span>
+          <span style={{color:"#305870",fontSize:11}}>{mktLabel} {mktTime}</span>
         </div>
       </div>
 
@@ -4062,7 +4067,6 @@ export default function App() {
 
                 // Counter — inputs are L1 prices, used as reference for legged calcs
                 if(cBid!=null){
-                  addImp(l1.exp,l1.ten,"bid",cBid,cBk);
                   // Legged L1 bid from live L0 bid — spread bank
                   if(l0.liveBid!=null){
                     const l1v=+(cBid+(l0.liveBid-l0.spxN)*R).toFixed(4);
@@ -4071,7 +4075,6 @@ export default function App() {
                   }
                 }
                 if(cOff!=null){
-                  addImp(l1.exp,l1.ten,"offer",cOff,cBk);
                   // Legged L1 offer from live L0 offer — spread bank
                   if(l0.liveOffer!=null){
                     const l1v=+(cOff+(l0.liveOffer-l0.spxN)*R).toFixed(4);
