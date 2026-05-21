@@ -2861,10 +2861,10 @@ export default function App() {
     const getLiveQ = (exp, ten) => {
       const k = cellKey(exp.toLowerCase(), ten);
       const cell = quotes[k];
-      if (!cell) return { liveBid: null, liveOffer: null };
+      if (!cell) return { liveBid: null, liveOffer: null, liveBidBank: null, liveOfferBank: null };
       const b = (cell.bids || []).filter(q => !referred.has(`${k}|bids|${q.id}`)).sort((a, c) => c.price - a.price);
       const o = (cell.offers || []).filter(q => !referred.has(`${k}|offers|${q.id}`)).sort((a, c) => a.price - c.price);
-      return { liveBid: b[0]?.price ?? null, liveOffer: o[0]?.price ?? null };
+      return { liveBid: b[0]?.price ?? null, liveOffer: o[0]?.price ?? null, liveBidBank: b[0]?.bank ?? null, liveOfferBank: o[0]?.bank ?? null };
     };
     const merged = {};
     const addM = (exp, ten, side, val, bk) => {
@@ -2879,43 +2879,45 @@ export default function App() {
       const [l0, l1] = legs;
       if (!l0.spxN || !l1.spxN || !l0.ratioN || !l1.ratioN) return;
       const R = l0.ratioN / l1.ratioN;
-      const bk = l0.bank || "";
       const l0Live = getLiveQ(l0.exp, l0.ten);
       const l1Live = getLiveQ(l1.exp, l1.ten);
+      const bk = l0.bank || l0Live.liveBidBank || l0Live.liveOfferBank || "";
       const cntr = entry.counter || {};
       const cBk = cntr.bank || bk;
       const hasCounter = cntr.bid != null || cntr.offer != null;
 
-      // Standard flows — only when NO counter (counter has its own reference prices)
+      // Standard flows — only when NO counter
       if (!hasCounter) {
         const l0IsBid = (l0.side || "bid") === "bid";
         if (l0IsBid || entry.twoWay) {
-          if (l0Live.liveOffer != null) addM(l1.exp, l1.ten, "offer", +(l1.spxN + (l0Live.liveOffer - l0.spxN) * R).toFixed(4), bk);
+          if (l0Live.liveOffer != null) addM(l1.exp, l1.ten, "offer", +(l1.spxN + (l0Live.liveOffer - l0.spxN) * R).toFixed(4), l0Live.liveOfferBank||bk);
         }
         if (!l0IsBid || entry.twoWay) {
-          if (l0Live.liveBid != null) addM(l1.exp, l1.ten, "bid", +(l1.spxN + (l0Live.liveBid - l0.spxN) * R).toFixed(4), bk);
+          if (l0Live.liveBid != null) addM(l1.exp, l1.ten, "bid", +(l1.spxN + (l0Live.liveBid - l0.spxN) * R).toFixed(4), l0Live.liveBidBank||bk);
         }
         const l1IsOff = (l1.side || "offer") === "offer";
         if (l1IsOff || entry.twoWay) {
-          if (l1Live.liveBid != null) addM(l0.exp, l0.ten, "bid", +(l0.spxN + (l1Live.liveBid - l1.spxN) / R).toFixed(4), bk);
+          if (l1Live.liveBid != null) addM(l0.exp, l0.ten, "bid", +(l0.spxN + (l1Live.liveBid - l1.spxN) / R).toFixed(4), l1Live.liveBidBank||bk);
         }
         if (!l1IsOff || entry.twoWay) {
-          if (l1Live.liveOffer != null) addM(l0.exp, l0.ten, "offer", +(l0.spxN + (l1Live.liveOffer - l1.spxN) / R).toFixed(4), bk);
+          if (l1Live.liveOffer != null) addM(l0.exp, l0.ten, "offer", +(l0.spxN + (l1Live.liveOffer - l1.spxN) / R).toFixed(4), l1Live.liveOfferBank||bk);
         }
       }
 
-      // Counter: 2-way spread shown directly on L1
-      if (cntr.bid != null && cntr.offer != null) {
+      // Counter: show direct prices on L1 grid
+      if (cntr.bid != null) {
         addM(l1.exp, l1.ten, "bid", cntr.bid, cBk);
+      }
+      if (cntr.offer != null) {
         addM(l1.exp, l1.ten, "offer", cntr.offer, cBk);
       }
       if (cntr.bid != null) {
-        if (l0Live.liveBid != null) addM(l1.exp, l1.ten, "bid", +(cntr.bid + (l0Live.liveBid - l0.spxN) * R).toFixed(4), bk);
-        if (l1Live.liveOffer != null) addM(l0.exp, l0.ten, "offer", +(l0.spxN + (l1Live.liveOffer - cntr.bid) / R).toFixed(4), cBk);
+        if (l0Live.liveBid != null) addM(l1.exp, l1.ten, "bid", +(cntr.bid + (l0Live.liveBid - l0.spxN) * R).toFixed(4), l0Live.liveBidBank||bk);
+        if (l1Live.liveOffer != null) addM(l0.exp, l0.ten, "offer", +(l0.spxN + (l1Live.liveOffer - cntr.bid) / R).toFixed(4), l1Live.liveOfferBank||cBk);
       }
       if (cntr.offer != null) {
-        if (l0Live.liveOffer != null) addM(l1.exp, l1.ten, "offer", +(cntr.offer + (l0Live.liveOffer - l0.spxN) * R).toFixed(4), bk);
-        if (l1Live.liveBid != null) addM(l0.exp, l0.ten, "bid", +(l0.spxN + (l1Live.liveBid - cntr.offer) / R).toFixed(4), cBk);
+        if (l0Live.liveOffer != null) addM(l1.exp, l1.ten, "offer", +(cntr.offer + (l0Live.liveOffer - l0.spxN) * R).toFixed(4), l0Live.liveOfferBank||bk);
+        if (l1Live.liveBid != null) addM(l0.exp, l0.ten, "bid", +(l0.spxN + (l1Live.liveBid - cntr.offer) / R).toFixed(4), l1Live.liveBidBank||cBk);
       }
     });
     setSpreadImplied(merged);
@@ -4044,10 +4046,10 @@ export default function App() {
               const getLive=(exp,ten)=>{
                 const k=cellKey(exp.toLowerCase(),ten);
                 const cell=quotes[k];
-                if(!cell) return {liveBid:null,liveOffer:null};
+                if(!cell) return {liveBid:null,liveOffer:null,liveBidBank:null,liveOfferBank:null};
                 const b=(cell.bids||[]).filter(q=>!isReferred(k,"bids",q.id)).sort((a,c)=>c.price-a.price);
                 const o=(cell.offers||[]).filter(q=>!isReferred(k,"offers",q.id)).sort((a,c)=>a.price-c.price);
-                return {liveBid:b[0]?.price??null, liveOffer:o[0]?.price??null};
+                return {liveBid:b[0]?.price??null, liveOffer:o[0]?.price??null, liveBidBank:b[0]?.bank??null, liveOfferBank:o[0]?.bank??null};
               };
 
               const solve=()=>{
@@ -4056,7 +4058,7 @@ export default function App() {
                 if(legs.some(l=>!l.spxN||!l.ratioN)){setSpreadResult({err:"Enter SPX and ratio for all legs"});return;}
                 const [l0,l1]=legs;
                 const R=l0.ratioN/l1.ratioN;
-                const bk=l0.bank||"";
+                const bk=l0.bank||l0.liveBidBank||l0.liveOfferBank||"";
                 const rows=[];
                 const imp={};
                 const addImp=(exp,ten,side,val,impBk)=>{
@@ -4075,52 +4077,55 @@ export default function App() {
                   const l0IsBid=(l0.side||"bid")==="bid";
                   const l1IsOff=(l1.side||"offer")==="offer";
                   if(l0IsBid||spreadTwoWay){
-                    if(l0.liveOffer!=null){const v=+(l1.spxN+(l0.liveOffer-l0.spxN)*R).toFixed(4);rows.push({lbl:`${l0.exp}${l0.ten} ${l0.liveOffer} offer → ${l1.exp}${l1.ten}`,val:v,side:"offer",bank:bk});addImp(l1.exp,l1.ten,"offer",v);}
+                    if(l0.liveOffer!=null){const v=+(l1.spxN+(l0.liveOffer-l0.spxN)*R).toFixed(4);rows.push({lbl:`${l0.exp}${l0.ten} ${l0.liveOffer} offer → ${l1.exp}${l1.ten}`,val:v,side:"offer",bank:l0.liveOfferBank||bk});addImp(l1.exp,l1.ten,"offer",v,l0.liveOfferBank||bk);}
                   }
                   if(!l0IsBid||spreadTwoWay){
-                    if(l0.liveBid!=null){const v=+(l1.spxN+(l0.liveBid-l0.spxN)*R).toFixed(4);rows.push({lbl:`${l0.exp}${l0.ten} ${l0.liveBid} bid → ${l1.exp}${l1.ten}`,val:v,side:"bid",bank:bk});addImp(l1.exp,l1.ten,"bid",v);}
+                    if(l0.liveBid!=null){const v=+(l1.spxN+(l0.liveBid-l0.spxN)*R).toFixed(4);rows.push({lbl:`${l0.exp}${l0.ten} ${l0.liveBid} bid → ${l1.exp}${l1.ten}`,val:v,side:"bid",bank:l0.liveBidBank||bk});addImp(l1.exp,l1.ten,"bid",v,l0.liveBidBank||bk);}
                   }
                   if(l1IsOff||spreadTwoWay){
-                    if(l1.liveBid!=null){const v=+(l0.spxN+(l1.liveBid-l1.spxN)/R).toFixed(4);rows.push({lbl:`${l1.exp}${l1.ten} ${l1.liveBid} bid → ${l0.exp}${l0.ten}`,val:v,side:"bid",bank:bk});addImp(l0.exp,l0.ten,"bid",v);}
+                    if(l1.liveBid!=null){const v=+(l0.spxN+(l1.liveBid-l1.spxN)/R).toFixed(4);rows.push({lbl:`${l1.exp}${l1.ten} ${l1.liveBid} bid → ${l0.exp}${l0.ten}`,val:v,side:"bid",bank:l1.liveBidBank||bk});addImp(l0.exp,l0.ten,"bid",v,l1.liveBidBank||bk);}
                   }
                   if(!l1IsOff||spreadTwoWay){
-                    if(l1.liveOffer!=null){const v=+(l0.spxN+(l1.liveOffer-l1.spxN)/R).toFixed(4);rows.push({lbl:`${l1.exp}${l1.ten} ${l1.liveOffer} offer → ${l0.exp}${l0.ten}`,val:v,side:"offer",bank:bk});addImp(l0.exp,l0.ten,"offer",v);}
+                    if(l1.liveOffer!=null){const v=+(l0.spxN+(l1.liveOffer-l1.spxN)/R).toFixed(4);rows.push({lbl:`${l1.exp}${l1.ten} ${l1.liveOffer} offer → ${l0.exp}${l0.ten}`,val:v,side:"offer",bank:l1.liveOfferBank||bk});addImp(l0.exp,l0.ten,"offer",v,l1.liveOfferBank||bk);}
                   }
                 }
 
-                // Counter — inputs are L1 prices, used as reference for legged calcs
-                // If 2-way counter (both bid+offer), show spread directly on L1 grid
-                if(cBid!=null&&cOff!=null){
+                // Counter — show direct prices on L1 grid
+                if(cBid!=null){
                   addImp(l1.exp,l1.ten,"bid",cBid,cBk);
+                }
+                if(cOff!=null){
                   addImp(l1.exp,l1.ten,"offer",cOff,cBk);
+                }
+                if(cBid!=null&&cOff!=null){
                   rows.push({lbl:`SPRD ${cBid}/${cOff} ${cBk||""}`,val:`${cBid}/${cOff}`,side:"bid",bank:cBk,counter:true});
                 }
                 if(cBid!=null){
-                  // Legged L1 bid from live L0 bid — spread bank
+                  // Legged L1 bid from live L0 bid — L0 bid bank
                   if(l0.liveBid!=null){
                     const l1v=+(cBid+(l0.liveBid-l0.spxN)*R).toFixed(4);
-                    rows.push({lbl:`${l0.exp}${l0.ten} ${l0.liveBid}b → ${l1.exp}${l1.ten}`,val:l1v,side:"bid",bank:bk,counter:true});
-                    addImp(l1.exp,l1.ten,"bid",l1v,bk);
+                    rows.push({lbl:`${l0.exp}${l0.ten} ${l0.liveBid}b → ${l1.exp}${l1.ten}`,val:l1v,side:"bid",bank:l0.liveBidBank||bk,counter:true});
+                    addImp(l1.exp,l1.ten,"bid",l1v,l0.liveBidBank||bk);
                   }
                 }
                 if(cOff!=null){
-                  // Legged L1 offer from live L0 offer — spread bank
+                  // Legged L1 offer from live L0 offer — L0 offer bank
                   if(l0.liveOffer!=null){
                     const l1v=+(cOff+(l0.liveOffer-l0.spxN)*R).toFixed(4);
-                    rows.push({lbl:`${l0.exp}${l0.ten} ${l0.liveOffer}o → ${l1.exp}${l1.ten}`,val:l1v,side:"offer",bank:bk,counter:true});
-                    addImp(l1.exp,l1.ten,"offer",l1v,bk);
+                    rows.push({lbl:`${l0.exp}${l0.ten} ${l0.liveOffer}o → ${l1.exp}${l1.ten}`,val:l1v,side:"offer",bank:l0.liveOfferBank||bk,counter:true});
+                    addImp(l1.exp,l1.ten,"offer",l1v,l0.liveOfferBank||bk);
                   }
                 }
-                // Outright L1 quotes → implied L0 — counter bank
+                // Outright L1 quotes → implied L0 — L1 quote bank
                 if(cBid!=null&&l1.liveOffer!=null){
                   const l0v=+(l0.spxN+(l1.liveOffer-cBid)/R).toFixed(4);
-                  rows.push({lbl:`${l1.exp}${l1.ten} ${l1.liveOffer}o → ${l0.exp}${l0.ten}`,val:l0v,side:"offer",bank:cBk,counter:true});
-                  addImp(l0.exp,l0.ten,"offer",l0v,cBk);
+                  rows.push({lbl:`${l1.exp}${l1.ten} ${l1.liveOffer}o → ${l0.exp}${l0.ten}`,val:l0v,side:"offer",bank:l1.liveOfferBank||cBk,counter:true});
+                  addImp(l0.exp,l0.ten,"offer",l0v,l1.liveOfferBank||cBk);
                 }
                 if(cOff!=null&&l1.liveBid!=null){
                   const l0v=+(l0.spxN+(l1.liveBid-cOff)/R).toFixed(4);
-                  rows.push({lbl:`${l1.exp}${l1.ten} ${l1.liveBid}b → ${l0.exp}${l0.ten}`,val:l0v,side:"bid",bank:cBk,counter:true});
-                  addImp(l0.exp,l0.ten,"bid",l0v,cBk);
+                  rows.push({lbl:`${l1.exp}${l1.ten} ${l1.liveBid}b → ${l0.exp}${l0.ten}`,val:l0v,side:"bid",bank:l1.liveBidBank||cBk,counter:true});
+                  addImp(l0.exp,l0.ten,"bid",l0v,l1.liveBidBank||cBk);
                 }
 
                 const bankLabel = bk ? (cBk && cBk!==bk ? ` ${bk} v ${cBk}` : ` ${bk}`) : (cBk ? ` ${cBk}` : "");
