@@ -2868,10 +2868,10 @@ export default function App() {
     const addM = (exp, ten, side, val, bk) => {
       const k = `${exp.toLowerCase()}|${ten}`;
       if (!merged[k]) merged[k] = {};
-      if (side === "bid" && (merged[k].bid == null || val > merged[k].bid)) { merged[k].bid = val; merged[k].bank = bk; }
-      if (side === "offer" && (merged[k].offer == null || val < merged[k].offer)) { merged[k].offer = val; merged[k].bank = bk; }
+      if (side === "bid" && (merged[k].bid == null || val > merged[k].bid)) { merged[k].bid = val; merged[k].bidBank = bk; }
+      if (side === "offer" && (merged[k].offer == null || val < merged[k].offer)) { merged[k].offer = val; merged[k].offerBank = bk; }
     };
-    spreadLog.slice(0, 4).forEach(entry => {
+    spreadLog.forEach(entry => {
       if (!entry.legs || entry.legs.length < 2) return;
       const legs = entry.legs.map(l => ({ ...l, spxN: parseFloat(l.spreadPx) || null, ratioN: parseFloat(l.ratio) || null }));
       const [l0, l1] = legs;
@@ -3729,7 +3729,7 @@ export default function App() {
                               if(!spr.bid) return null;
                               const ob=bids.filter(q=>!isReferred(cellKey(exp,ten),"bids",q.id)).sort((a,b)=>b.price-a.price)[0]?.price??null;
                               if(ob!=null&&spr.bid<ob) return null; // show if tied or better
-                              return <div style={{color:"#c080f0",fontWeight:700,fontSize:11,textAlign:"center"}}>{spr.bid.toFixed(4)}{spr.bank&&<span style={{color:bkc(spr.bank),fontSize:7,marginLeft:2,fontWeight:700}}>{spr.bank}</span>}</div>;
+                              return <div style={{color:"#c080f0",fontWeight:700,fontSize:11,textAlign:"center"}}>{spr.bid.toFixed(4)}{spr.bidBank&&<span style={{color:bkc(spr.bidBank),fontSize:7,marginLeft:2,fontWeight:700}}>{spr.bidBank}</span>}</div>;
                             })()}
                             {/* BIDS — best only, full depth on hover */}
                             {(isHov ? bids : bids.slice(0,1)).map((q,i)=>{
@@ -3789,7 +3789,7 @@ export default function App() {
                               if(!spr2.offer) return null;
                               const oo=offers.filter(q=>!isReferred(cellKey(exp,ten),"offers",q.id)).sort((a,b)=>a.price-b.price)[0]?.price??null;
                               if(oo!=null&&spr2.offer>oo) return null; // show if tied or better
-                              return <div style={{color:"#9050d0",fontWeight:700,fontSize:11,textAlign:"center"}}>{spr2.offer.toFixed(4)}{spr2.bank&&<span style={{color:bkc(spr2.bank),fontSize:7,marginLeft:2,fontWeight:700}}>{spr2.bank}</span>}</div>;
+                              return <div style={{color:"#9050d0",fontWeight:700,fontSize:11,textAlign:"center"}}>{spr2.offer.toFixed(4)}{spr2.offerBank&&<span style={{color:bkc(spr2.offerBank),fontSize:7,marginLeft:2,fontWeight:700}}>{spr2.offerBank}</span>}</div>;
                             })()}
                             {isHov && (hasBid||hasOff) && (
                               <div style={{textAlign:"center",marginTop:1}}>
@@ -4194,12 +4194,11 @@ export default function App() {
                       <span style={{color:"#5a3080",fontSize:7,fontWeight:700,letterSpacing:".06em"}}>HISTORY</span>
                       <button onClick={()=>{setSpreadLog([]);setSpreadImplied({});}} style={{...iS,color:"#4a2020",padding:"0 4px",fontSize:6}}>CLR</button>
                     </div>
-                    {spreadLog.slice(0,10).map((h,hi)=>{
+                    {spreadLog.slice(0,20).map((h,hi)=>{
                       const sameCount=spreadLog.filter(x=>x.name===h.name).length;
-                      const isActive=hi<4;
                       return (
-                        <div key={h.id} style={{background:isActive?"rgba(20,10,40,.7)":"rgba(20,5,30,.4)",border:`1px solid ${isActive?"#4a2090":sameCount>1?"#808020":"#2a1a4a"}`,borderRadius:2,padding:"3px 6px",marginBottom:2,display:"flex",alignItems:"center",gap:4}}>
-                          {isActive&&<span style={{color:"#40c070",fontSize:6,flexShrink:0}}>●</span>}
+                        <div key={h.id} style={{background:"rgba(20,10,40,.7)",border:`1px solid ${sameCount>1?"#808020":"#2a1a4a"}`,borderRadius:2,padding:"3px 6px",marginBottom:2,display:"flex",alignItems:"center",gap:4}}>
+                          <span style={{color:"#40c070",fontSize:6,flexShrink:0}}>●</span>
                           <div style={{flex:1,minWidth:0}}>
                             <div style={{color:sameCount>1?"#e0c040":"#60a8d0",fontSize:7,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{h.name}</div>
                             <div style={{color:"#3a6080",fontSize:7}}>{(h.rows?.filter(r=>!r.counter).length ? h.rows.filter(r=>!r.counter) : h.rows||[]).map(r=>`${r.val}${r.side==="bid"?"b":"o"}`).join(" / ")}</div>
