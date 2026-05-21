@@ -2952,6 +2952,24 @@ export default function App() {
     el.onmouseleave = () => { setSdrHover(null); };
   }, [sdrHover]);
 
+  const CCY_TZ = {AUD:"Australia/Sydney",USD:"America/New_York",EUR:"Europe/London",JPY:"Asia/Tokyo"};
+  const mktTz = CCY_TZ[activeCcy]||"Australia/Sydney";
+  const tradingDayStartMs = useMemo(() => {
+    const n = new Date();
+    const fmt = new Intl.DateTimeFormat("en-US",{timeZone:mktTz,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",hour12:false});
+    const parts = Object.fromEntries(fmt.formatToParts(n).map(p=>[p.type,p.value]));
+    const hr = parseInt(parts.hour);
+    const dayStr = `${parts.year}-${parts.month}-${parts.day}`;
+    const baseDate = new Date(dayStr+"T07:00:00");
+    if (hr < 7) baseDate.setDate(baseDate.getDate() - 1);
+    let guess = baseDate.getTime();
+    for (let i=0;i<3;i++){
+      const guessHr = parseInt(new Intl.DateTimeFormat("en-US",{timeZone:mktTz,hour:"2-digit",hour12:false}).format(new Date(guess)));
+      guess += (7 - guessHr)*3600000;
+    }
+    return guess;
+  }, [activeCcy]);
+
   // Rebuild SDR flash when filters change
   useEffect(() => {
     if (!sdrRawData.length) return;
@@ -3403,26 +3421,6 @@ export default function App() {
     });
   };
 
-  const CCY_TZ = {AUD:"Australia/Sydney",USD:"America/New_York",EUR:"Europe/London",JPY:"Asia/Tokyo"};
-  const mktTz = CCY_TZ[activeCcy]||"Australia/Sydney";
-  // Compute current trading day start (most recent 7am in ccy timezone) as UTC ms
-  const tradingDayStartMs = useMemo(() => {
-    const n = new Date();
-    const fmt = new Intl.DateTimeFormat("en-US",{timeZone:mktTz,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",hour12:false});
-    const parts = Object.fromEntries(fmt.formatToParts(n).map(p=>[p.type,p.value]));
-    const hr = parseInt(parts.hour);
-    const dayStr = `${parts.year}-${parts.month}-${parts.day}`;
-    // If before 7am local, use yesterday
-    const baseDate = new Date(dayStr+"T07:00:00");
-    if (hr < 7) baseDate.setDate(baseDate.getDate() - 1);
-    // Find UTC equivalent of 7am in target tz by binary search-ish: create date, check what hour it is in tz
-    let guess = baseDate.getTime();
-    for (let i=0;i<3;i++){
-      const guessHr = parseInt(new Intl.DateTimeFormat("en-US",{timeZone:mktTz,hour:"2-digit",hour12:false}).format(new Date(guess)));
-      guess += (7 - guessHr)*3600000;
-    }
-    return guess;
-  }, [activeCcy, Math.floor(Date.now()/60000)]);
   const mktTime = now.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit",second:"2-digit",timeZone:mktTz});
   const mktHr = parseInt(now.toLocaleString("en-GB",{hour:"numeric",hour12:false,timeZone:mktTz}));
   const mktLive = mktHr >= 7 && mktHr < 18;
