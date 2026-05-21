@@ -4055,10 +4055,6 @@ export default function App() {
                 }
 
                 // Counter — inputs are L1 prices (counterparty bid/offer on L1)
-                // Implies L0 via spread, and sets L1 implied directly
-                const cBid=parseFloat(spreadCounter.bid)||null;
-                const cOff=parseFloat(spreadCounter.offer)||null;
-                const cBk=spreadCounter.bank||bk;
                 if(cBid!=null){
                   // Counter bid on L1 → implied L0 bid
                   const l0v=+(l0.spxN+(cBid-l1.spxN)/R).toFixed(4);
