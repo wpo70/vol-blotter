@@ -2900,12 +2900,14 @@ export default function App() {
         if (l1Live.liveOffer != null) addM(l0.exp, l0.ten, "offer", +(l0.spxN + (l1Live.liveOffer - l1.spxN) / R).toFixed(4), bk);
       }
 
-      // Counter: L1 reference — legged from live L0 (spread bank), outright L1 → L0 (counter bank)
+      // Counter: L1 reference — direct prices, legged from live L0 (spread bank), outright L1 → L0 (counter bank)
       if (cntr.bid != null) {
+        addM(l1.exp, l1.ten, "bid", cntr.bid, cBk);
         if (l0Live.liveBid != null) addM(l1.exp, l1.ten, "bid", +(cntr.bid + (l0Live.liveBid - l0.spxN) * R).toFixed(4), bk);
         if (l1Live.liveOffer != null) addM(l0.exp, l0.ten, "offer", +(l0.spxN + (l1Live.liveOffer - cntr.bid) / R).toFixed(4), cBk);
       }
       if (cntr.offer != null) {
+        addM(l1.exp, l1.ten, "offer", cntr.offer, cBk);
         if (l0Live.liveOffer != null) addM(l1.exp, l1.ten, "offer", +(cntr.offer + (l0Live.liveOffer - l0.spxN) * R).toFixed(4), bk);
         if (l1Live.liveBid != null) addM(l0.exp, l0.ten, "bid", +(l0.spxN + (l1Live.liveBid - cntr.offer) / R).toFixed(4), cBk);
       }
