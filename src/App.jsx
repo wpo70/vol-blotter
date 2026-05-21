@@ -2900,13 +2900,13 @@ export default function App() {
         if (l1Live.liveOffer != null) addM(l0.exp, l0.ten, "offer", +(l0.spxN + (l1Live.liveOffer - l1.spxN) / R).toFixed(4), bk);
       }
 
-      // Counter: L1 reference — legged from live L0, outright L1 → L0
+      // Counter: L1 reference — legged from live L0 (spread bank), outright L1 → L0 (counter bank)
       if (cntr.bid != null) {
-        if (l0Live.liveBid != null) addM(l1.exp, l1.ten, "bid", +(cntr.bid + (l0Live.liveBid - l0.spxN) * R).toFixed(4), cBk);
+        if (l0Live.liveBid != null) addM(l1.exp, l1.ten, "bid", +(cntr.bid + (l0Live.liveBid - l0.spxN) * R).toFixed(4), bk);
         if (l1Live.liveOffer != null) addM(l0.exp, l0.ten, "offer", +(l0.spxN + (l1Live.liveOffer - cntr.bid) / R).toFixed(4), cBk);
       }
       if (cntr.offer != null) {
-        if (l0Live.liveOffer != null) addM(l1.exp, l1.ten, "offer", +(cntr.offer + (l0Live.liveOffer - l0.spxN) * R).toFixed(4), cBk);
+        if (l0Live.liveOffer != null) addM(l1.exp, l1.ten, "offer", +(cntr.offer + (l0Live.liveOffer - l0.spxN) * R).toFixed(4), bk);
         if (l1Live.liveBid != null) addM(l0.exp, l0.ten, "bid", +(l0.spxN + (l1Live.liveBid - cntr.offer) / R).toFixed(4), cBk);
       }
     });
@@ -4055,23 +4055,23 @@ export default function App() {
                 // Counter — inputs are L1 prices, used as reference for legged calcs
                 if(cBid!=null){
                   addImp(l1.exp,l1.ten,"bid",cBid);
-                  // Legged L1 bid from live L0 bid
+                  // Legged L1 bid from live L0 bid — spread bank
                   if(l0.liveBid!=null){
                     const l1v=+(cBid+(l0.liveBid-l0.spxN)*R).toFixed(4);
-                    rows.push({lbl:`${l0.exp}${l0.ten} ${l0.liveBid}b → ${l1.exp}${l1.ten}`,val:l1v,side:"bid",bank:cBk,counter:true});
+                    rows.push({lbl:`${l0.exp}${l0.ten} ${l0.liveBid}b → ${l1.exp}${l1.ten}`,val:l1v,side:"bid",bank:bk,counter:true});
                     addImp(l1.exp,l1.ten,"bid",l1v);
                   }
                 }
                 if(cOff!=null){
                   addImp(l1.exp,l1.ten,"offer",cOff);
-                  // Legged L1 offer from live L0 offer
+                  // Legged L1 offer from live L0 offer — spread bank
                   if(l0.liveOffer!=null){
                     const l1v=+(cOff+(l0.liveOffer-l0.spxN)*R).toFixed(4);
-                    rows.push({lbl:`${l0.exp}${l0.ten} ${l0.liveOffer}o → ${l1.exp}${l1.ten}`,val:l1v,side:"offer",bank:cBk,counter:true});
+                    rows.push({lbl:`${l0.exp}${l0.ten} ${l0.liveOffer}o → ${l1.exp}${l1.ten}`,val:l1v,side:"offer",bank:bk,counter:true});
                     addImp(l1.exp,l1.ten,"offer",l1v);
                   }
                 }
-                // Outright L1 quotes → implied L0
+                // Outright L1 quotes → implied L0 — counter bank
                 if(cBid!=null&&l1.liveOffer!=null){
                   const l0v=+(l0.spxN+(l1.liveOffer-cBid)/R).toFixed(4);
                   rows.push({lbl:`${l1.exp}${l1.ten} ${l1.liveOffer}o → ${l0.exp}${l0.ten}`,val:l0v,side:"offer",bank:cBk,counter:true});
@@ -4177,6 +4177,7 @@ export default function App() {
                         <span style={{color:r.counter?"#c0a030":"#4a2070",fontSize:7,flex:1}}>{r.lbl}</span>
                         <span style={{color:r.side==="bid"?"#00c040":"#ff8c00",fontWeight:700,fontSize:14}}>{r.val}</span>
                         <span style={{color:r.side==="bid"?"#00c040":"#ff8c00",fontSize:7,fontWeight:700}}>{r.side==="bid"?"BID":"OFFER"}</span>
+                        {r.bank&&<span style={{color:bkc(r.bank),fontSize:7,fontWeight:700}}>{r.bank}</span>}
                       </div>
                     ))}
                   </div>
