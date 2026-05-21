@@ -2856,6 +2856,8 @@ export default function App() {
   // Recompute spread implied prices when quotes or referred change
   useEffect(() => {
     if (!spreadLog.length) return;
+    const ccyLog = spreadLog.filter(e => !e.ccy || e.ccy === activeCcy);
+    if (!ccyLog.length) { setSpreadImplied({}); return; }
     const getLiveQ = (exp, ten) => {
       const k = cellKey(exp.toLowerCase(), ten);
       const cell = quotes[k];
@@ -2871,7 +2873,7 @@ export default function App() {
       if (side === "bid" && (merged[k].bid == null || val > merged[k].bid)) { merged[k].bid = val; merged[k].bidBank = bk; }
       if (side === "offer" && (merged[k].offer == null || val < merged[k].offer)) { merged[k].offer = val; merged[k].offerBank = bk; }
     };
-    spreadLog.forEach(entry => {
+    ccyLog.forEach(entry => {
       if (!entry.legs || entry.legs.length < 2) return;
       const legs = entry.legs.map(l => ({ ...l, spxN: parseFloat(l.spreadPx) || null, ratioN: parseFloat(l.ratio) || null }));
       const [l0, l1] = legs;
@@ -2913,7 +2915,7 @@ export default function App() {
       }
     });
     setSpreadImplied(merged);
-  }, [quotes, referred, spreadLog]);
+  }, [quotes, referred, spreadLog, activeCcy]);
   useEffect(() => { try { localStorage.setItem("vbl_sdr_type",   JSON.stringify(sdrFilterType));     } catch {} }, [sdrFilterType]);
   useEffect(() => { try { localStorage.setItem("vbl_sdr_venue",  JSON.stringify(sdrFilterPlatform)); } catch {} }, [sdrFilterPlatform]);
   useEffect(() => { try { localStorage.setItem("vbl_sdr_action", JSON.stringify(sdrFilterAction));   } catch {} }, [sdrFilterAction]);
@@ -3997,7 +3999,7 @@ export default function App() {
               <button onClick={()=>{
                 setSpreadResult(null);setSpreadImplied({});setSpreadTwoWay(false);setSpreadName("");setSpreadCounter({bid:"",offer:"",bank:""});
                 setSpreadLegs([{exp:"1y",ten:"1Y",spreadPx:"",ratio:"8",side:"bid",bank:""},{exp:"1y",ten:"10Y",spreadPx:"",ratio:"1",side:"offer",bank:""}]);
-                setSpreadLog([]);
+                setSpreadLog(prev=>prev.filter(e=>e.ccy&&e.ccy!==activeCcy));
               }} style={{fontSize:7,padding:"1px 5px",borderRadius:2,cursor:"pointer",fontFamily:"inherit",border:"1px solid #3a1a1a",background:"rgba(60,20,20,.4)",color:"#a04040"}}>CLR</button>
               <button onClick={()=>setSpreadLegs(p=>p.length<4?[...p,{exp:"1y",ten:"10Y",spreadPx:"",ratio:"1",side:"offer",bank:""}]:p)}
                 style={{fontSize:7,padding:"1px 5px",borderRadius:2,cursor:"pointer",fontFamily:"inherit",border:"1px solid #2a3860",background:"rgba(20,30,50,.4)",color:"#5a96c8"}}>+LEG</button>
@@ -4091,7 +4093,7 @@ export default function App() {
 
                 const bankLabel = bk ? (cBk && cBk!==bk ? ` ${bk} v ${cBk}` : ` ${bk}`) : (cBk ? ` ${cBk}` : "");
                 const label=spreadName||`${legs.map(l=>`${l.exp}${l.ten.toLowerCase()}`).join(" v ")} ${legs.map(l=>l.ratioN).join(":")}${bankLabel}`;
-                const entry={id:Date.now(),name:label,ts:new Date().toISOString(),rows,l0,l1,R,legs:JSON.parse(JSON.stringify(spreadLegs)),imp,twoWay:spreadTwoWay,counter:{bid:cBid,offer:cOff,bank:cBk}};
+                const entry={id:Date.now(),name:label,ccy:activeCcy,ts:new Date().toISOString(),rows,l0,l1,R,legs:JSON.parse(JSON.stringify(spreadLegs)),imp,twoWay:spreadTwoWay,counter:{bid:cBid,offer:cOff,bank:cBk}};
                 setSpreadLog(prev=>{
                   const next=[entry,...prev.filter(h=>h.name!==label)].slice(0,20);
                   return next;
@@ -4195,9 +4197,9 @@ export default function App() {
                   <div>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
                       <span style={{color:"#5a3080",fontSize:7,fontWeight:700,letterSpacing:".06em"}}>HISTORY</span>
-                      <button onClick={()=>{setSpreadLog([]);setSpreadImplied({});}} style={{...iS,color:"#4a2020",padding:"0 4px",fontSize:6}}>CLR</button>
+                      <button onClick={()=>{setSpreadLog(prev=>prev.filter(e=>e.ccy&&e.ccy!==activeCcy));setSpreadImplied({});}} style={{...iS,color:"#4a2020",padding:"0 4px",fontSize:6}}>CLR</button>
                     </div>
-                    {spreadLog.slice(0,20).map((h,hi)=>{
+                    {spreadLog.filter(e=>!e.ccy||e.ccy===activeCcy).slice(0,20).map((h,hi)=>{
                       const sameCount=spreadLog.filter(x=>x.name===h.name).length;
                       return (
                         <div key={h.id} style={{background:"rgba(20,10,40,.7)",border:`1px solid ${sameCount>1?"#808020":"#2a1a4a"}`,borderRadius:2,padding:"3px 6px",marginBottom:2,display:"flex",alignItems:"center",gap:4}}>
