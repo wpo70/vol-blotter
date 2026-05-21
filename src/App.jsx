@@ -3675,7 +3675,7 @@ export default function App() {
                     const _sdrAge = _sdr ? (Date.now() - _sdr.ts) : Infinity;
                     if (_sdrAge < 30*60*1000)        bg = "rgba(255,160,40,.50)"; // < 30min
                     else if (_sdrAge < 4*60*60*1000)  bg = "rgba(220,130,20,.32)"; // < 4hr
-                    else if (_sdr.ts >= tradingDayStartMs) bg = "rgba(180,100,10,.18)"; // current trading day
+                    else if (_sdr && _sdr.ts >= tradingDayStartMs) bg = "rgba(180,100,10,.18)"; // current trading day
                     if(both)        bg = cross?"rgba(20,50,180,.50)":"rgba(40,70,20,.40)";
                     else if(hasBid) bg = "rgba(0,80,30,.35)";
                     else if(hasOff) bg = "rgba(100,45,0,.30)";
