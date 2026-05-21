@@ -2499,7 +2499,7 @@ function sdrTenToKey(s) {
 }
 
 
-function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatform, tradingDayStartMs) {
+function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatform, tradingDayStartMs, tradingDayEndMs) {
   const flash = {};
   const actF = Array.isArray(sdrFilterAction)  ? sdrFilterAction  : [];
   const typF = Array.isArray(sdrFilterType)    ? sdrFilterType    : [];
@@ -2559,7 +2559,7 @@ function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatfor
           if (!expKey || !tenKey) return;
           const k = `${expKey}|${tenKey}`;
           const ts = new Date(r.event_timestamp).getTime();
-          if (ts < tradingDayStartMs) return; // skip before current trading day 7am
+          if (ts < tradingDayStartMs || ts > tradingDayEndMs) return; // only 7am-6pm trading day
             const notl = parseFloat(r.notional_leg1||0);
             const payPrem = parseFloat(r.premium_amount||0);
             const isPaired = !!r._paired;
@@ -2884,22 +2884,24 @@ export default function App() {
       const l1Live = getLiveQ(l1.exp, l1.ten);
       const cntr = entry.counter || {};
       const cBk = cntr.bank || bk;
+      const hasCounter = cntr.bid != null || cntr.offer != null;
 
-      // Standard: L0 live → L1 implied
-      const l0IsBid = (l0.side || "bid") === "bid";
-      if (l0IsBid || entry.twoWay) {
-        if (l0Live.liveOffer != null) addM(l1.exp, l1.ten, "offer", +(l1.spxN + (l0Live.liveOffer - l0.spxN) * R).toFixed(4), bk);
-      }
-      if (!l0IsBid || entry.twoWay) {
-        if (l0Live.liveBid != null) addM(l1.exp, l1.ten, "bid", +(l1.spxN + (l0Live.liveBid - l0.spxN) * R).toFixed(4), bk);
-      }
-      // L1 live → L0 implied
-      const l1IsOff = (l1.side || "offer") === "offer";
-      if (l1IsOff || entry.twoWay) {
-        if (l1Live.liveBid != null) addM(l0.exp, l0.ten, "bid", +(l0.spxN + (l1Live.liveBid - l1.spxN) / R).toFixed(4), bk);
-      }
-      if (!l1IsOff || entry.twoWay) {
-        if (l1Live.liveOffer != null) addM(l0.exp, l0.ten, "offer", +(l0.spxN + (l1Live.liveOffer - l1.spxN) / R).toFixed(4), bk);
+      // Standard flows — only when NO counter (counter has its own reference prices)
+      if (!hasCounter) {
+        const l0IsBid = (l0.side || "bid") === "bid";
+        if (l0IsBid || entry.twoWay) {
+          if (l0Live.liveOffer != null) addM(l1.exp, l1.ten, "offer", +(l1.spxN + (l0Live.liveOffer - l0.spxN) * R).toFixed(4), bk);
+        }
+        if (!l0IsBid || entry.twoWay) {
+          if (l0Live.liveBid != null) addM(l1.exp, l1.ten, "bid", +(l1.spxN + (l0Live.liveBid - l0.spxN) * R).toFixed(4), bk);
+        }
+        const l1IsOff = (l1.side || "offer") === "offer";
+        if (l1IsOff || entry.twoWay) {
+          if (l1Live.liveBid != null) addM(l0.exp, l0.ten, "bid", +(l0.spxN + (l1Live.liveBid - l1.spxN) / R).toFixed(4), bk);
+        }
+        if (!l1IsOff || entry.twoWay) {
+          if (l1Live.liveOffer != null) addM(l0.exp, l0.ten, "offer", +(l0.spxN + (l1Live.liveOffer - l1.spxN) / R).toFixed(4), bk);
+        }
       }
 
       // Counter: 2-way spread shown directly on L1
@@ -2969,11 +2971,12 @@ export default function App() {
     }
     return guess;
   }, [activeCcy]);
+  const tradingDayEndMs = tradingDayStartMs + 11*3600000; // 7am + 11hr = 6pm
 
   // Rebuild SDR flash when filters change
   useEffect(() => {
     if (!sdrRawData.length) return;
-    const flash = buildSdrFlash(sdrRawData, sdrFilterAction, sdrFilterType, sdrFilterPlatform, tradingDayStartMs);
+    const flash = buildSdrFlash(sdrRawData, sdrFilterAction, sdrFilterType, sdrFilterPlatform, tradingDayStartMs, tradingDayEndMs);
     window.__sdrFlash=flash; sdrFlashRef.current=flash; setSdrFlash(flash);
   }, [sdrFilterAction, sdrFilterType, sdrFilterPlatform, sdrRawData, tradingDayStartMs]);
 
@@ -3013,7 +3016,7 @@ export default function App() {
           console.log("[SDR] swp_tenors:", tenors);
         }
         if (!sdrData?.length) return;
-        const flash = buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatform, tradingDayStartMs);
+        const flash = buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatform, tradingDayStartMs, tradingDayEndMs);
         setSdrRawData(sdrData);
         window.__sdrFlash=flash;
         setSdrFlash(flash);
