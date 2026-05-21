@@ -1,5 +1,5 @@
 // RateEdge vol-blotter 0704d
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL  || "";
@@ -2499,7 +2499,7 @@ function sdrTenToKey(s) {
 }
 
 
-function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatform) {
+function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatform, tradingDayStartMs) {
   const flash = {};
   const actF = Array.isArray(sdrFilterAction)  ? sdrFilterAction  : [];
   const typF = Array.isArray(sdrFilterType)    ? sdrFilterType    : [];
@@ -2559,7 +2559,7 @@ function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatfor
           if (!expKey || !tenKey) return;
           const k = `${expKey}|${tenKey}`;
           const ts = new Date(r.event_timestamp).getTime();
-          if (Date.now() - ts > 24*60*60*1000) return; // skip > 24hr old
+          if (ts < tradingDayStartMs) return; // skip before current trading day 7am
             const notl = parseFloat(r.notional_leg1||0);
             const payPrem = parseFloat(r.premium_amount||0);
             const isPaired = !!r._paired;
@@ -2902,7 +2902,11 @@ export default function App() {
         if (l1Live.liveOffer != null) addM(l0.exp, l0.ten, "offer", +(l0.spxN + (l1Live.liveOffer - l1.spxN) / R).toFixed(4), bk);
       }
 
-      // Counter: L1 reference — direct prices, legged from live L0 (spread bank), outright L1 → L0 (counter bank)
+      // Counter: 2-way spread shown directly on L1
+      if (cntr.bid != null && cntr.offer != null) {
+        addM(l1.exp, l1.ten, "bid", cntr.bid, cBk);
+        addM(l1.exp, l1.ten, "offer", cntr.offer, cBk);
+      }
       if (cntr.bid != null) {
         if (l0Live.liveBid != null) addM(l1.exp, l1.ten, "bid", +(cntr.bid + (l0Live.liveBid - l0.spxN) * R).toFixed(4), bk);
         if (l1Live.liveOffer != null) addM(l0.exp, l0.ten, "offer", +(l0.spxN + (l1Live.liveOffer - cntr.bid) / R).toFixed(4), cBk);
@@ -2951,9 +2955,9 @@ export default function App() {
   // Rebuild SDR flash when filters change
   useEffect(() => {
     if (!sdrRawData.length) return;
-    const flash = buildSdrFlash(sdrRawData, sdrFilterAction, sdrFilterType, sdrFilterPlatform);
+    const flash = buildSdrFlash(sdrRawData, sdrFilterAction, sdrFilterType, sdrFilterPlatform, tradingDayStartMs);
     window.__sdrFlash=flash; sdrFlashRef.current=flash; setSdrFlash(flash);
-  }, [sdrFilterAction, sdrFilterType, sdrFilterPlatform, sdrRawData]);
+  }, [sdrFilterAction, sdrFilterType, sdrFilterPlatform, sdrRawData, tradingDayStartMs]);
 
   // SDR trade poll
   useEffect(() => {
@@ -2991,7 +2995,7 @@ export default function App() {
           console.log("[SDR] swp_tenors:", tenors);
         }
         if (!sdrData?.length) return;
-        const flash = buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatform);
+        const flash = buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatform, tradingDayStartMs);
         setSdrRawData(sdrData);
         window.__sdrFlash=flash;
         setSdrFlash(flash);
@@ -3401,6 +3405,24 @@ export default function App() {
 
   const CCY_TZ = {AUD:"Australia/Sydney",USD:"America/New_York",EUR:"Europe/London",JPY:"Asia/Tokyo"};
   const mktTz = CCY_TZ[activeCcy]||"Australia/Sydney";
+  // Compute current trading day start (most recent 7am in ccy timezone) as UTC ms
+  const tradingDayStartMs = useMemo(() => {
+    const n = new Date();
+    const fmt = new Intl.DateTimeFormat("en-US",{timeZone:mktTz,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",hour12:false});
+    const parts = Object.fromEntries(fmt.formatToParts(n).map(p=>[p.type,p.value]));
+    const hr = parseInt(parts.hour);
+    const dayStr = `${parts.year}-${parts.month}-${parts.day}`;
+    // If before 7am local, use yesterday
+    const baseDate = new Date(dayStr+"T07:00:00");
+    if (hr < 7) baseDate.setDate(baseDate.getDate() - 1);
+    // Find UTC equivalent of 7am in target tz by binary search-ish: create date, check what hour it is in tz
+    let guess = baseDate.getTime();
+    for (let i=0;i<3;i++){
+      const guessHr = parseInt(new Intl.DateTimeFormat("en-US",{timeZone:mktTz,hour:"2-digit",hour12:false}).format(new Date(guess)));
+      guess += (7 - guessHr)*3600000;
+    }
+    return guess;
+  }, [activeCcy, Math.floor(Date.now()/60000)]);
   const mktTime = now.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit",second:"2-digit",timeZone:mktTz});
   const mktHr = parseInt(now.toLocaleString("en-GB",{hour:"numeric",hour12:false,timeZone:mktTz}));
   const mktLive = mktHr >= 7 && mktHr < 18;
@@ -3655,7 +3677,7 @@ export default function App() {
                     const _sdrAge = _sdr ? (Date.now() - _sdr.ts) : Infinity;
                     if (_sdrAge < 30*60*1000)        bg = "rgba(255,160,40,.50)"; // < 30min
                     else if (_sdrAge < 4*60*60*1000)  bg = "rgba(220,130,20,.32)"; // < 4hr
-                    else if (_sdrAge < 24*60*60*1000) bg = "rgba(180,100,10,.18)"; // < 24hr
+                    else if (_sdr.ts >= tradingDayStartMs) bg = "rgba(180,100,10,.18)"; // current trading day
                     if(both)        bg = cross?"rgba(20,50,180,.50)":"rgba(40,70,20,.40)";
                     else if(hasBid) bg = "rgba(0,80,30,.35)";
                     else if(hasOff) bg = "rgba(100,45,0,.30)";
@@ -3666,7 +3688,7 @@ export default function App() {
 
                     return (
                       <td key={ten} className="hv"
-                        data-sdr={(_sdr&&_sdrAge<86400000)?JSON.stringify(_sdrArr):null}
+                        data-sdr={(_sdr&&_sdr.ts>=tradingDayStartMs)?JSON.stringify(_sdrArr):null}
                         onClick={()=>!isActive && openCell(exp,ten)}
                         onMouseEnter={e=>{clearTimeout(sdrDismissRef.current);setHoveredCell(k);try{const _d=e.currentTarget.getAttribute("data-sdr");if(_d){const _a=JSON.parse(_d);setSdrHover({trades:_a,x:e.clientX,y:e.clientY});}}catch(err){}}}
                         onMouseLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget)){setHoveredCell(null);clearTimeout(sdrDismissRef.current);sdrDismissRef.current=setTimeout(()=>setSdrHover(null),150);}}}
@@ -3721,7 +3743,7 @@ export default function App() {
                             <div style={{textAlign:"center",color:(hasBid||hasOff)?"#508090":"#68a0ba",fontSize:(hasBid||hasOff)?8:11,fontWeight:(hasBid||hasOff)?400:500,opacity:(hasBid||hasOff)?.45:1,marginBottom:(hasBid||hasOff)?1:0}}>
                               {dispMid ?? "--"}
                             </div>
-                            {_sdr && _sdrAge < 24*60*60*1000 && <div style={{color:_sdrAge<5*60*1000?"#ff8c00":"#a05010",fontSize:7,textAlign:"center",fontWeight:700}}>
+                            {_sdr && _sdr.ts >= tradingDayStartMs && <div style={{color:_sdrAge<5*60*1000?"#ff8c00":"#a05010",fontSize:7,textAlign:"center",fontWeight:700}}>
                               {_sdr.type||"SDR"} {_sdr.notional?(+_sdr.notional/1e6).toFixed(0)+"M":""}{_sdr.nettBp ? " "+_sdr.nettBp.toFixed(0)+"bp" : ""}{_sdrArr.length>1 ? " +"+(_sdrArr.length-1) : ""}
                             </div>}
 
@@ -4066,6 +4088,12 @@ export default function App() {
                 }
 
                 // Counter — inputs are L1 prices, used as reference for legged calcs
+                // If 2-way counter (both bid+offer), show spread directly on L1 grid
+                if(cBid!=null&&cOff!=null){
+                  addImp(l1.exp,l1.ten,"bid",cBid,cBk);
+                  addImp(l1.exp,l1.ten,"offer",cOff,cBk);
+                  rows.push({lbl:`SPRD ${cBid}/${cOff} ${cBk||""}`,val:`${cBid}/${cOff}`,side:"bid",bank:cBk,counter:true});
+                }
                 if(cBid!=null){
                   // Legged L1 bid from live L0 bid — spread bank
                   if(l0.liveBid!=null){
