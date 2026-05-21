@@ -3989,9 +3989,13 @@ export default function App() {
                   background:spreadTwoWay?"rgba(180,180,0,.2)":"rgba(20,30,50,.4)",
                   color:spreadTwoWay?"#c0c040":"#5a6080",fontWeight:700}}>2-WAY</button>
               <button onClick={()=>{
-                setSpreadResult(null);setSpreadImplied({});setSpreadTwoWay(false);setSpreadName("");
+                setSpreadResult(null);setSpreadTwoWay(false);setSpreadName("");setSpreadCounter({bid:"",offer:"",bank:""});
                 setSpreadLegs([{exp:"1y",ten:"1Y",spreadPx:"",ratio:"8",side:"bid",bank:""},{exp:"1y",ten:"10Y",spreadPx:"",ratio:"1",side:"offer",bank:""}]);
-                setSpreadCounter({bid:"",offer:"",bank:""});
+              }} style={{fontSize:7,padding:"1px 5px",borderRadius:2,cursor:"pointer",fontFamily:"inherit",border:"1px solid #1a3a1a",background:"rgba(20,60,20,.4)",color:"#40a040"}}>NEW</button>
+              <button onClick={()=>{
+                setSpreadResult(null);setSpreadImplied({});setSpreadTwoWay(false);setSpreadName("");setSpreadCounter({bid:"",offer:"",bank:""});
+                setSpreadLegs([{exp:"1y",ten:"1Y",spreadPx:"",ratio:"8",side:"bid",bank:""},{exp:"1y",ten:"10Y",spreadPx:"",ratio:"1",side:"offer",bank:""}]);
+                setSpreadLog([]);
               }} style={{fontSize:7,padding:"1px 5px",borderRadius:2,cursor:"pointer",fontFamily:"inherit",border:"1px solid #3a1a1a",background:"rgba(60,20,20,.4)",color:"#a04040"}}>CLR</button>
               <button onClick={()=>setSpreadLegs(p=>p.length<4?[...p,{exp:"1y",ten:"10Y",spreadPx:"",ratio:"1",side:"offer",bank:""}]:p)}
                 style={{fontSize:7,padding:"1px 5px",borderRadius:2,cursor:"pointer",fontFamily:"inherit",border:"1px solid #2a3860",background:"rgba(20,30,50,.4)",color:"#5a96c8"}}>+LEG</button>
@@ -4192,8 +4196,10 @@ export default function App() {
                     </div>
                     {spreadLog.slice(0,10).map((h,hi)=>{
                       const sameCount=spreadLog.filter(x=>x.name===h.name).length;
+                      const isActive=hi<4;
                       return (
-                        <div key={h.id} style={{background:"rgba(20,5,30,.6)",border:`1px solid ${sameCount>1?"#808020":"#2a1a4a"}`,borderRadius:2,padding:"3px 6px",marginBottom:2,display:"flex",alignItems:"center",gap:4}}>
+                        <div key={h.id} style={{background:isActive?"rgba(20,10,40,.7)":"rgba(20,5,30,.4)",border:`1px solid ${isActive?"#4a2090":sameCount>1?"#808020":"#2a1a4a"}`,borderRadius:2,padding:"3px 6px",marginBottom:2,display:"flex",alignItems:"center",gap:4}}>
+                          {isActive&&<span style={{color:"#40c070",fontSize:6,flexShrink:0}}>●</span>}
                           <div style={{flex:1,minWidth:0}}>
                             <div style={{color:sameCount>1?"#e0c040":"#60a8d0",fontSize:7,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{h.name}</div>
                             <div style={{color:"#3a6080",fontSize:7}}>{(h.rows?.filter(r=>!r.counter).length ? h.rows.filter(r=>!r.counter) : h.rows||[]).map(r=>`${r.val}${r.side==="bid"?"b":"o"}`).join(" / ")}</div>
@@ -4201,6 +4207,8 @@ export default function App() {
                           </div>
                           <button onClick={()=>{setSpreadName(h.name);setSpreadLegs(h.legs);setSpreadResult(h);setSpreadCounter(h.counter?{bid:h.counter.bid!=null?String(h.counter.bid):"",offer:h.counter.offer!=null?String(h.counter.offer):"",bank:h.counter.bank||""}:{bid:"",offer:"",bank:""});}}
                             style={{...iS,color:"#c080f0",borderColor:"#5a20a0",padding:"1px 5px",fontSize:7,flexShrink:0}}>↺</button>
+                          <button onClick={()=>setSpreadLog(prev=>prev.filter(x=>x.id!==h.id))}
+                            style={{...iS,color:"#a04040",borderColor:"#3a1a1a",padding:"1px 4px",fontSize:7,flexShrink:0}}>×</button>
                         </div>
                       );
                     })}
