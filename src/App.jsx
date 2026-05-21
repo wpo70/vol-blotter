@@ -4087,7 +4087,8 @@ export default function App() {
                   addImp(l0.exp,l0.ten,"bid",l0v);
                 }
 
-                const label=spreadName||`${legs.map(l=>`${l.exp}${l.ten.toLowerCase()}`).join(" v ")} ${legs.map(l=>l.ratioN).join(":")}`;
+                const bankLabel = bk ? (cBk && cBk!==bk ? ` ${bk} v ${cBk}` : ` ${bk}`) : (cBk ? ` ${cBk}` : "");
+                const label=spreadName||`${legs.map(l=>`${l.exp}${l.ten.toLowerCase()}`).join(" v ")} ${legs.map(l=>l.ratioN).join(":")}${bankLabel}`;
                 const entry={id:Date.now(),name:label,ts:new Date().toISOString(),rows,l0,l1,R,legs:JSON.parse(JSON.stringify(spreadLegs)),imp,twoWay:spreadTwoWay,counter:{bid:cBid,offer:cOff,bank:cBk}};
                 setSpreadLog(prev=>{
                   const next=[entry,...prev.filter(h=>h.name!==label)].slice(0,20);
@@ -4100,7 +4101,7 @@ export default function App() {
                 {/* Name + bank */}
                 <div style={{display:"grid",gridTemplateColumns:"1fr 44px",gap:3,marginBottom:4}}>
                   <input value={spreadName} onChange={e=>setSpreadName(e.target.value)}
-                    placeholder={`${spreadLegs.map(l=>`${l.exp}${l.ten.toLowerCase()}`).join(" v ")} ${spreadLegs.map(l=>l.ratio||"1").join(":")}`}
+                    placeholder={`${spreadLegs.map(l=>`${l.exp}${l.ten.toLowerCase()}`).join(" v ")} ${spreadLegs.map(l=>l.ratio||"1").join(":")}${spreadLegs[0]?.bank ? " "+spreadLegs[0].bank : ""}${spreadCounter.bank && spreadCounter.bank!==spreadLegs[0]?.bank ? " v "+spreadCounter.bank : ""}`}
                     style={{...iS,color:"#c080f0",fontSize:8,padding:"3px 5px"}}/>
                   <input value={spreadLegs[0]?.bank||""} onChange={e=>setSpreadLegs(p=>p.map(l=>({...l,bank:e.target.value.toUpperCase()})))}
                     placeholder="BK" style={{...iS,color:bkc(spreadLegs[0]?.bank||""),fontWeight:700,textAlign:"center"}}/>
