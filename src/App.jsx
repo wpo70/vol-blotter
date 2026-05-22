@@ -2867,11 +2867,11 @@ export default function App() {
       return { liveBid: b[0]?.price ?? null, liveOffer: o[0]?.price ?? null, liveBidBank: b[0]?.bank ?? null, liveOfferBank: o[0]?.bank ?? null };
     };
     const merged = {};
-    const addM = (exp, ten, side, val, bk) => {
+    const addM = (exp, ten, side, val, bk, isLegged=false) => {
       const k = `${exp.toLowerCase()}|${ten}`;
       if (!merged[k]) merged[k] = {};
-      if (side === "bid" && (merged[k].bid == null || val > merged[k].bid)) { merged[k].bid = val; merged[k].bidBank = bk; }
-      if (side === "offer" && (merged[k].offer == null || val < merged[k].offer)) { merged[k].offer = val; merged[k].offerBank = bk; }
+      if (side === "bid" && (merged[k].bid == null || val > merged[k].bid)) { merged[k].bid = val; merged[k].bidBank = bk; merged[k].bidLegged = isLegged; }
+      if (side === "offer" && (merged[k].offer == null || val < merged[k].offer)) { merged[k].offer = val; merged[k].offerBank = bk; merged[k].offerLegged = isLegged; }
     };
     ccyLog.forEach(entry => {
       if (!entry.legs || entry.legs.length < 2) return;
@@ -2890,17 +2890,17 @@ export default function App() {
       if (!hasCounter) {
         const l0IsBid = (l0.side || "bid") === "bid";
         if (l0IsBid || entry.twoWay) {
-          if (l0Live.liveOffer != null) addM(l1.exp, l1.ten, "offer", +(l1.spxN + (l0Live.liveOffer - l0.spxN) * R).toFixed(4), l0Live.liveOfferBank||bk);
+          if (l0Live.liveOffer != null) addM(l1.exp, l1.ten, "offer", +(l1.spxN + (l0Live.liveOffer - l0.spxN) * R).toFixed(4), l0Live.liveOfferBank||bk, true);
         }
         if (!l0IsBid || entry.twoWay) {
-          if (l0Live.liveBid != null) addM(l1.exp, l1.ten, "bid", +(l1.spxN + (l0Live.liveBid - l0.spxN) * R).toFixed(4), l0Live.liveBidBank||bk);
+          if (l0Live.liveBid != null) addM(l1.exp, l1.ten, "bid", +(l1.spxN + (l0Live.liveBid - l0.spxN) * R).toFixed(4), l0Live.liveBidBank||bk, true);
         }
         const l1IsOff = (l1.side || "offer") === "offer";
         if (l1IsOff || entry.twoWay) {
-          if (l1Live.liveBid != null) addM(l0.exp, l0.ten, "bid", +(l0.spxN + (l1Live.liveBid - l1.spxN) / R).toFixed(4), l1Live.liveBidBank||bk);
+          if (l1Live.liveBid != null) addM(l0.exp, l0.ten, "bid", +(l0.spxN + (l1Live.liveBid - l1.spxN) / R).toFixed(4), l1Live.liveBidBank||bk, true);
         }
         if (!l1IsOff || entry.twoWay) {
-          if (l1Live.liveOffer != null) addM(l0.exp, l0.ten, "offer", +(l0.spxN + (l1Live.liveOffer - l1.spxN) / R).toFixed(4), l1Live.liveOfferBank||bk);
+          if (l1Live.liveOffer != null) addM(l0.exp, l0.ten, "offer", +(l0.spxN + (l1Live.liveOffer - l1.spxN) / R).toFixed(4), l1Live.liveOfferBank||bk, true);
         }
       }
 
@@ -2916,22 +2916,23 @@ export default function App() {
         merged[k0].locked = l0.spxN;
         merged[k0].lockedSide = (l0.side||"bid");
         merged[k0].lockedBank = bk;
+        merged[k0].otherLeg = `${l1.exp}${l1.ten.toLowerCase()}`;
 
         // L1 bid: legged from L0 outright bid, or fallback to counter/SPX direct
         if (l0Live.liveBid != null) {
-          addM(l1.exp, l1.ten, "bid", +(effBid + (l0Live.liveBid - l0.spxN) * R).toFixed(4), l0Live.liveBidBank||bk);
+          addM(l1.exp, l1.ten, "bid", +(effBid + (l0Live.liveBid - l0.spxN) * R).toFixed(4), l0Live.liveBidBank||bk, true);
         } else {
-          addM(l1.exp, l1.ten, "bid", effBid, effBidBk);
+          addM(l1.exp, l1.ten, "bid", effBid, effBidBk, false);
         }
         // L1 offer: legged from L0 outright offer, or fallback to counter/SPX direct
         if (l0Live.liveOffer != null) {
-          addM(l1.exp, l1.ten, "offer", +(effOff + (l0Live.liveOffer - l0.spxN) * R).toFixed(4), l0Live.liveOfferBank||bk);
+          addM(l1.exp, l1.ten, "offer", +(effOff + (l0Live.liveOffer - l0.spxN) * R).toFixed(4), l0Live.liveOfferBank||bk, true);
         } else {
-          addM(l1.exp, l1.ten, "offer", effOff, effOffBk);
+          addM(l1.exp, l1.ten, "offer", effOff, effOffBk, false);
         }
         // Outright L1 → implied L0
-        if (cntr.bid != null && l1Live.liveOffer != null) addM(l0.exp, l0.ten, "offer", +(l0.spxN + (l1Live.liveOffer - cntr.bid) / R).toFixed(4), l1Live.liveOfferBank||cBk);
-        if (cntr.offer != null && l1Live.liveBid != null) addM(l0.exp, l0.ten, "bid", +(l0.spxN + (l1Live.liveBid - cntr.offer) / R).toFixed(4), l1Live.liveBidBank||cBk);
+        if (cntr.bid != null && l1Live.liveOffer != null) addM(l0.exp, l0.ten, "offer", +(l0.spxN + (l1Live.liveOffer - cntr.bid) / R).toFixed(4), l1Live.liveOfferBank||cBk, true);
+        if (cntr.offer != null && l1Live.liveBid != null) addM(l0.exp, l0.ten, "bid", +(l0.spxN + (l1Live.liveBid - cntr.offer) / R).toFixed(4), l1Live.liveBidBank||cBk, true);
       }
     });
     setSpreadImplied(merged);
@@ -3767,17 +3768,17 @@ export default function App() {
                             {(()=>{
                               const spr=spreadImplied[`${exp}|${ten}`];
                               if(!spr) return null;
-                              // Show LOCKED price on source leg
+                              // Show LOCKED price on source leg with other leg reference
                               if(spr.locked!=null&&(spr.lockedSide==="bid"||spr.lockedSide==="offer")) return (
                                 <div style={{color:"#e0c040",fontWeight:700,fontSize:11,textAlign:"center"}}>
-                                  {spr.locked.toFixed(4)}<span style={{color:"#806010",fontSize:7,marginLeft:2}}>L</span>
+                                  {spr.locked.toFixed(4)}<span style={{color:"#806010",fontSize:7,marginLeft:2}}>v {spr.otherLeg||""}</span>
                                   {spr.lockedBank&&<span style={{color:bkc(spr.lockedBank),fontSize:7,marginLeft:2}}>{spr.lockedBank}</span>}
                                 </div>);
                               // Show implied BID (better than outright)
                               if(!spr.bid) return null;
                               const ob=bids.filter(q=>!isReferred(cellKey(exp,ten),"bids",q.id)).sort((a,b)=>b.price-a.price)[0]?.price??null;
                               if(ob!=null&&spr.bid<ob) return null; // show if tied or better
-                              return <div style={{color:"#c080f0",fontWeight:700,fontSize:11,textAlign:"center"}}>{spr.bid.toFixed(4)}{spr.bidBank&&<span style={{color:bkc(spr.bidBank),fontSize:7,marginLeft:2,fontWeight:700}}>{spr.bidBank}</span>}</div>;
+                              return <div style={{color:spr.bidLegged?"#c080f0":"#e0c040",fontWeight:700,fontSize:11,textAlign:"center"}}>{spr.bid.toFixed(4)}{spr.bidBank&&<span style={{color:bkc(spr.bidBank),fontSize:7,marginLeft:2,fontWeight:700}}>{spr.bidBank}</span>}</div>;
                             })()}
                             {/* BIDS — best only, full depth on hover */}
                             {(isHov ? bids : bids.slice(0,1)).map((q,i)=>{
@@ -3831,7 +3832,7 @@ export default function App() {
                               if(!spr2.offer) return null;
                               const oo=offers.filter(q=>!isReferred(cellKey(exp,ten),"offers",q.id)).sort((a,b)=>a.price-b.price)[0]?.price??null;
                               if(oo!=null&&spr2.offer>oo) return null; // show if tied or better
-                              return <div style={{color:"#9050d0",fontWeight:700,fontSize:11,textAlign:"center"}}>{spr2.offer.toFixed(4)}{spr2.offerBank&&<span style={{color:bkc(spr2.offerBank),fontSize:7,marginLeft:2,fontWeight:700}}>{spr2.offerBank}</span>}</div>;
+                              return <div style={{color:spr2.offerLegged?"#9050d0":"#e0c040",fontWeight:700,fontSize:11,textAlign:"center"}}>{spr2.offer.toFixed(4)}{spr2.offerBank&&<span style={{color:bkc(spr2.offerBank),fontSize:7,marginLeft:2,fontWeight:700}}>{spr2.offerBank}</span>}</div>;
                             })()}
                             {isHov && (hasBid||hasOff) && (
                               <div style={{textAlign:"center",marginTop:1}}>
@@ -4110,6 +4111,7 @@ export default function App() {
                   imp[k0].locked=l0.spxN;
                   imp[k0].lockedSide=(l0.side||"bid");
                   imp[k0].lockedBank=bk;
+                  imp[k0].otherLeg=`${l1.exp}${l1.ten.toLowerCase()}`;
 
                   // L1 bid: legged from L0 bid, or fallback
                   if(l0.liveBid!=null){
