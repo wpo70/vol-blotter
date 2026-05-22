@@ -2904,22 +2904,34 @@ export default function App() {
         }
       }
 
-      // Counter: legged prices from outrights, fallback to counter direct if no outrights
-      if (cntr.bid != null) {
+      // Counter: fill missing side from L1 SPX, then compute legged or fallback
+      const effBid = cntr.bid != null ? cntr.bid : l1.spxN;
+      const effOff = cntr.offer != null ? cntr.offer : l1.spxN;
+      const effBidBk = cntr.bid != null ? cBk : bk;
+      const effOffBk = cntr.offer != null ? cBk : bk;
+      if (hasCounter) {
+        // Show L0 lock on grid
+        const k0 = `${l0.exp.toLowerCase()}|${l0.ten}`;
+        if (!merged[k0]) merged[k0] = {};
+        merged[k0].locked = l0.spxN;
+        merged[k0].lockedSide = (l0.side||"bid");
+        merged[k0].lockedBank = bk;
+
+        // L1 bid: legged from L0 outright bid, or fallback to counter/SPX direct
         if (l0Live.liveBid != null) {
-          addM(l1.exp, l1.ten, "bid", +(cntr.bid + (l0Live.liveBid - l0.spxN) * R).toFixed(4), l0Live.liveBidBank||bk);
+          addM(l1.exp, l1.ten, "bid", +(effBid + (l0Live.liveBid - l0.spxN) * R).toFixed(4), l0Live.liveBidBank||bk);
         } else {
-          addM(l1.exp, l1.ten, "bid", cntr.bid, cBk);
+          addM(l1.exp, l1.ten, "bid", effBid, effBidBk);
         }
-        if (l1Live.liveOffer != null) addM(l0.exp, l0.ten, "offer", +(l0.spxN + (l1Live.liveOffer - cntr.bid) / R).toFixed(4), l1Live.liveOfferBank||cBk);
-      }
-      if (cntr.offer != null) {
+        // L1 offer: legged from L0 outright offer, or fallback to counter/SPX direct
         if (l0Live.liveOffer != null) {
-          addM(l1.exp, l1.ten, "offer", +(cntr.offer + (l0Live.liveOffer - l0.spxN) * R).toFixed(4), l0Live.liveOfferBank||bk);
+          addM(l1.exp, l1.ten, "offer", +(effOff + (l0Live.liveOffer - l0.spxN) * R).toFixed(4), l0Live.liveOfferBank||bk);
         } else {
-          addM(l1.exp, l1.ten, "offer", cntr.offer, cBk);
+          addM(l1.exp, l1.ten, "offer", effOff, effOffBk);
         }
-        if (l1Live.liveBid != null) addM(l0.exp, l0.ten, "bid", +(l0.spxN + (l1Live.liveBid - cntr.offer) / R).toFixed(4), l1Live.liveBidBank||cBk);
+        // Outright L1 → implied L0
+        if (cntr.bid != null && l1Live.liveOffer != null) addM(l0.exp, l0.ten, "offer", +(l0.spxN + (l1Live.liveOffer - cntr.bid) / R).toFixed(4), l1Live.liveOfferBank||cBk);
+        if (cntr.offer != null && l1Live.liveBid != null) addM(l0.exp, l0.ten, "bid", +(l0.spxN + (l1Live.liveBid - cntr.offer) / R).toFixed(4), l1Live.liveBidBank||cBk);
       }
     });
     setSpreadImplied(merged);
@@ -3756,10 +3768,10 @@ export default function App() {
                               const spr=spreadImplied[`${exp}|${ten}`];
                               if(!spr) return null;
                               // Show LOCKED price on source leg
-                              if(spr.locked!=null&&spr.lockedSide==="offer") return (
+                              if(spr.locked!=null&&(spr.lockedSide==="bid"||spr.lockedSide==="offer")) return (
                                 <div style={{color:"#e0c040",fontWeight:700,fontSize:11,textAlign:"center"}}>
                                   {spr.locked.toFixed(4)}<span style={{color:"#806010",fontSize:7,marginLeft:2}}>L</span>
-                                  {spr.liveBid!=null&&spr.liveOffer!=null&&<span style={{color:"#604010",fontSize:7,marginLeft:3}}>{spr.liveBid}/{spr.liveOffer}</span>}
+                                  {spr.lockedBank&&<span style={{color:bkc(spr.lockedBank),fontSize:7,marginLeft:2}}>{spr.lockedBank}</span>}
                                 </div>);
                               // Show implied BID (better than outright)
                               if(!spr.bid) return null;
@@ -3816,12 +3828,6 @@ export default function App() {
                             {(()=>{
                               const spr2=spreadImplied[`${exp}|${ten}`];
                               if(!spr2) return null;
-                              // Show LOCKED price on source leg (bid side)
-                              if(spr2.locked!=null&&spr2.lockedSide==="bid") return (
-                                <div style={{color:"#e0c040",fontWeight:700,fontSize:11,textAlign:"center"}}>
-                                  {spr2.locked.toFixed(4)}<span style={{color:"#806010",fontSize:7,marginLeft:2}}>L</span>
-                                  {spr2.liveBid!=null&&spr2.liveOffer!=null&&<span style={{color:"#604010",fontSize:7,marginLeft:3}}>{spr2.liveBid}/{spr2.liveOffer}</span>}
-                                </div>);
                               if(!spr2.offer) return null;
                               const oo=offers.filter(q=>!isReferred(cellKey(exp,ten),"offers",q.id)).sort((a,b)=>a.price-b.price)[0]?.price??null;
                               if(oo!=null&&spr2.offer>oo) return null; // show if tied or better
@@ -4092,38 +4098,49 @@ export default function App() {
                   }
                 }
 
-                // Counter — legged prices, fallback to counter direct if no outrights
-                if(cBid!=null){
+                // Counter — fill missing side from L1 SPX, then leg or fallback
+                const effBid = cBid != null ? cBid : l1.spxN;
+                const effOff = cOff != null ? cOff : l1.spxN;
+                const effBidBk = cBid != null ? cBk : bk;
+                const effOffBk = cOff != null ? cBk : bk;
+                if(hasCounter){
+                  // Show L0 lock on grid
+                  const k0=`${l0.exp.toLowerCase()}|${l0.ten}`;
+                  if(!imp[k0])imp[k0]={};
+                  imp[k0].locked=l0.spxN;
+                  imp[k0].lockedSide=(l0.side||"bid");
+                  imp[k0].lockedBank=bk;
+
+                  // L1 bid: legged from L0 bid, or fallback
                   if(l0.liveBid!=null){
-                    const l1v=+(cBid+(l0.liveBid-l0.spxN)*R).toFixed(4);
+                    const l1v=+(effBid+(l0.liveBid-l0.spxN)*R).toFixed(4);
                     rows.push({lbl:`${l0.exp}${l0.ten} ${l0.liveBid}b → ${l1.exp}${l1.ten}`,val:l1v,side:"bid",bank:l0.liveBidBank||bk,counter:true});
                     addImp(l1.exp,l1.ten,"bid",l1v,l0.liveBidBank||bk);
                   } else {
-                    addImp(l1.exp,l1.ten,"bid",cBid,cBk);
+                    addImp(l1.exp,l1.ten,"bid",effBid,effBidBk);
                   }
-                }
-                if(cOff!=null){
+                  // L1 offer: legged from L0 offer, or fallback
                   if(l0.liveOffer!=null){
-                    const l1v=+(cOff+(l0.liveOffer-l0.spxN)*R).toFixed(4);
+                    const l1v=+(effOff+(l0.liveOffer-l0.spxN)*R).toFixed(4);
                     rows.push({lbl:`${l0.exp}${l0.ten} ${l0.liveOffer}o → ${l1.exp}${l1.ten}`,val:l1v,side:"offer",bank:l0.liveOfferBank||bk,counter:true});
                     addImp(l1.exp,l1.ten,"offer",l1v,l0.liveOfferBank||bk);
                   } else {
-                    addImp(l1.exp,l1.ten,"offer",cOff,cBk);
+                    addImp(l1.exp,l1.ten,"offer",effOff,effOffBk);
                   }
-                }
-                if(cBid!=null&&cOff!=null){
-                  rows.push({lbl:`SPRD ${cBid}/${cOff} ${cBk||""}`,val:`${cBid}/${cOff}`,side:"bid",bank:cBk,counter:true});
-                }
-                // Outright L1 quotes → implied L0 — L1 quote bank
-                if(cBid!=null&&l1.liveOffer!=null){
-                  const l0v=+(l0.spxN+(l1.liveOffer-cBid)/R).toFixed(4);
-                  rows.push({lbl:`${l1.exp}${l1.ten} ${l1.liveOffer}o → ${l0.exp}${l0.ten}`,val:l0v,side:"offer",bank:l1.liveOfferBank||cBk,counter:true});
-                  addImp(l0.exp,l0.ten,"offer",l0v,l1.liveOfferBank||cBk);
-                }
-                if(cOff!=null&&l1.liveBid!=null){
-                  const l0v=+(l0.spxN+(l1.liveBid-cOff)/R).toFixed(4);
-                  rows.push({lbl:`${l1.exp}${l1.ten} ${l1.liveBid}b → ${l0.exp}${l0.ten}`,val:l0v,side:"bid",bank:l1.liveBidBank||cBk,counter:true});
-                  addImp(l0.exp,l0.ten,"bid",l0v,l1.liveBidBank||cBk);
+                  if(cBid!=null&&cOff!=null){
+                    rows.push({lbl:`SPRD ${cBid}/${cOff} ${cBk||""}`,val:`${cBid}/${cOff}`,side:"bid",bank:cBk,counter:true});
+                  }
+                  // Outright L1 → implied L0
+                  if(cBid!=null&&l1.liveOffer!=null){
+                    const l0v=+(l0.spxN+(l1.liveOffer-cBid)/R).toFixed(4);
+                    rows.push({lbl:`${l1.exp}${l1.ten} ${l1.liveOffer}o → ${l0.exp}${l0.ten}`,val:l0v,side:"offer",bank:l1.liveOfferBank||cBk,counter:true});
+                    addImp(l0.exp,l0.ten,"offer",l0v,l1.liveOfferBank||cBk);
+                  }
+                  if(cOff!=null&&l1.liveBid!=null){
+                    const l0v=+(l0.spxN+(l1.liveBid-cOff)/R).toFixed(4);
+                    rows.push({lbl:`${l1.exp}${l1.ten} ${l1.liveBid}b → ${l0.exp}${l0.ten}`,val:l0v,side:"bid",bank:l1.liveBidBank||cBk,counter:true});
+                    addImp(l0.exp,l0.ten,"bid",l0v,l1.liveBidBank||cBk);
+                  }
                 }
 
                 const bankLabel = bk ? (cBk && cBk!==bk ? ` ${bk} v ${cBk}` : ` ${bk}`) : (cBk ? ` ${cBk}` : "");
