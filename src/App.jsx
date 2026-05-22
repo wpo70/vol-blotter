@@ -2978,16 +2978,19 @@ export default function App() {
     const fmt = new Intl.DateTimeFormat("en-US",{timeZone:mktTz,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",hour12:false});
     const parts = Object.fromEntries(fmt.formatToParts(n).map(p=>[p.type,p.value]));
     const hr = parseInt(parts.hour);
-    const dayStr = `${parts.year}-${parts.month}-${parts.day}`;
-    const baseDate = new Date(dayStr+"T07:00:00");
-    // If before 7am, use previous day's session (most recent completed session)
-    if (hr < 7) baseDate.setDate(baseDate.getDate() - 1);
-    let guess = baseDate.getTime();
-    for (let i=0;i<3;i++){
-      const guessHr = parseInt(new Intl.DateTimeFormat("en-US",{timeZone:mktTz,hour:"2-digit",hour12:false}).format(new Date(guess)));
-      guess += (7 - guessHr)*3600000;
+    // Work from current UTC time: go back (hr - 7) hours to reach 7am in target tz
+    const now = n.getTime();
+    const minsIntoHour = n.getMinutes();
+    let target7am;
+    if (hr >= 7) {
+      target7am = now - ((hr - 7) * 3600000 + minsIntoHour * 60000 + n.getSeconds() * 1000);
+    } else {
+      target7am = now - ((24 + hr - 7) * 3600000 + minsIntoHour * 60000 + n.getSeconds() * 1000);
     }
-    return guess;
+    // Fine-tune: verify hour in target tz and adjust
+    const checkHr = parseInt(new Intl.DateTimeFormat("en-US",{timeZone:mktTz,hour:"2-digit",hour12:false}).format(new Date(target7am)));
+    target7am += (7 - checkHr) * 3600000;
+    return target7am;
   }, [activeCcy]);
   const tradingDayEndMs = tradingDayStartMs + 11*3600000; // 7am + 11hr = 6pm
 
