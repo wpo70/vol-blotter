@@ -2910,13 +2910,6 @@ export default function App() {
       const effBidBk = cntr.bid != null ? cBk : bk;
       const effOffBk = cntr.offer != null ? cBk : bk;
       if (hasCounter) {
-        // Show L0 lock on grid
-        const k0 = `${l0.exp.toLowerCase()}|${l0.ten}`;
-        if (!merged[k0]) merged[k0] = {};
-        merged[k0].locked = l0.spxN;
-        merged[k0].lockedSide = (l0.side||"bid");
-        merged[k0].lockedBank = bk;
-
         // L1 bid: legged from L0 outright bid, or fallback to counter/SPX direct
         if (l0Live.liveBid != null) {
           addM(l1.exp, l1.ten, "bid", +(effBid + (l0Live.liveBid - l0.spxN) * R).toFixed(4), l0Live.liveBidBank||bk);
@@ -3768,10 +3761,10 @@ export default function App() {
                               const spr=spreadImplied[`${exp}|${ten}`];
                               if(!spr) return null;
                               // Show LOCKED price on source leg
-                              if(spr.locked!=null&&(spr.lockedSide==="bid"||spr.lockedSide==="offer")) return (
+                              if(spr.locked!=null&&spr.lockedSide==="offer") return (
                                 <div style={{color:"#e0c040",fontWeight:700,fontSize:11,textAlign:"center"}}>
                                   {spr.locked.toFixed(4)}<span style={{color:"#806010",fontSize:7,marginLeft:2}}>L</span>
-                                  {spr.lockedBank&&<span style={{color:bkc(spr.lockedBank),fontSize:7,marginLeft:2}}>{spr.lockedBank}</span>}
+                                  {spr.liveBid!=null&&spr.liveOffer!=null&&<span style={{color:"#604010",fontSize:7,marginLeft:3}}>{spr.liveBid}/{spr.liveOffer}</span>}
                                 </div>);
                               // Show implied BID (better than outright)
                               if(!spr.bid) return null;
@@ -3828,6 +3821,12 @@ export default function App() {
                             {(()=>{
                               const spr2=spreadImplied[`${exp}|${ten}`];
                               if(!spr2) return null;
+                              // Show LOCKED price on source leg (bid side)
+                              if(spr2.locked!=null&&spr2.lockedSide==="bid") return (
+                                <div style={{color:"#e0c040",fontWeight:700,fontSize:11,textAlign:"center"}}>
+                                  {spr2.locked.toFixed(4)}<span style={{color:"#806010",fontSize:7,marginLeft:2}}>L</span>
+                                  {spr2.liveBid!=null&&spr2.liveOffer!=null&&<span style={{color:"#604010",fontSize:7,marginLeft:3}}>{spr2.liveBid}/{spr2.liveOffer}</span>}
+                                </div>);
                               if(!spr2.offer) return null;
                               const oo=offers.filter(q=>!isReferred(cellKey(exp,ten),"offers",q.id)).sort((a,b)=>a.price-b.price)[0]?.price??null;
                               if(oo!=null&&spr2.offer>oo) return null; // show if tied or better
@@ -4104,13 +4103,6 @@ export default function App() {
                 const effBidBk = cBid != null ? cBk : bk;
                 const effOffBk = cOff != null ? cBk : bk;
                 if(hasCounter){
-                  // Show L0 lock on grid
-                  const k0=`${l0.exp.toLowerCase()}|${l0.ten}`;
-                  if(!imp[k0])imp[k0]={};
-                  imp[k0].locked=l0.spxN;
-                  imp[k0].lockedSide=(l0.side||"bid");
-                  imp[k0].lockedBank=bk;
-
                   // L1 bid: legged from L0 bid, or fallback
                   if(l0.liveBid!=null){
                     const l1v=+(effBid+(l0.liveBid-l0.spxN)*R).toFixed(4);
