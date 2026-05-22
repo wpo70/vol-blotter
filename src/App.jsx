@@ -2980,6 +2980,7 @@ export default function App() {
     const hr = parseInt(parts.hour);
     const dayStr = `${parts.year}-${parts.month}-${parts.day}`;
     const baseDate = new Date(dayStr+"T07:00:00");
+    // If before 7am, use previous day's session (most recent completed session)
     if (hr < 7) baseDate.setDate(baseDate.getDate() - 1);
     let guess = baseDate.getTime();
     for (let i=0;i<3;i++){
