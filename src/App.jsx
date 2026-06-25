@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 0704d
+// RateEdge vol-blotter 0704e
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -2630,11 +2630,12 @@ export default function App() {
   const [spreadResult,  setSpreadResult]  = useState(null);
   const [spreadLog,     setSpreadLog]     = useState(() => loadLS("vbl_spread_log", []));
   const [toasts, setToasts] = useState([]);
-  const addToast = (msg, type="cross") => {
-    const id = Date.now();
-    setToasts(p=>[...p,{id,msg,type}]);
-    setTimeout(()=>setToasts(p=>p.filter(t=>t.id!==id)), 6000);
+  const addToast = (msg, type="cross", sticky=false) => {
+    const id = Date.now()+Math.random();
+    setToasts(p=>[...p,{id,msg,type,sticky}]);
+    if(!sticky) setTimeout(()=>setToasts(p=>p.filter(t=>t.id!==id)), 6000);
   };
+  const dismissToast = (id) => setToasts(p=>p.filter(t=>t.id!==id));
   const [otmQuotes,  setOtmQuotes]       = useState(() => {
     return loadLS("vbl_otm2",[]).map(q=>({...q, ts:new Date(q.ts), counters:(q.counters||[]).map(c=>({...c,ts:new Date(c.ts)}))}));
   });
@@ -3053,6 +3054,49 @@ export default function App() {
     poll();
     const t = setInterval(poll, 60000);
     return () => clearInterval(t);
+  }, [activeCcy]);
+
+  // ── SDR new-trade ALERTS (additive — does NOT touch the flash poll above) ──
+  const [sdrAlertMinM, setSdrAlertMinM] = useState(()=>Number(loadLS("vbl_sdr_alert_min",0))||0);
+  useEffect(()=>{ try{localStorage.setItem("vbl_sdr_alert_min",JSON.stringify(sdrAlertMinM));}catch{} },[sdrAlertMinM]);
+  const sdrAlertMinRef = useRef(0);
+  useEffect(()=>{ sdrAlertMinRef.current = sdrAlertMinM; },[sdrAlertMinM]);
+  const seenSdrIds = useRef(null);   // null = not yet seeded
+  useEffect(()=>{
+    if(!SUPABASE_URL||!SUPABASE_ANON) return;
+    seenSdrIds.current = null;        // re-seed silently when currency switches
+    let stop=false;
+    const _fmtN=(n)=> n==null?"":(n>=1e9?`${(n/1e9).toFixed(2)}B`:n>=1e6?`${(n/1e6).toFixed(0)}M`:`${Math.round(n)}`);
+    const _fmtAlert=(r)=>{
+      const tn=[r.opt_tenor,r.swp_tenor].filter(Boolean).join("\u00d7");
+      const prem=r.premium_amount!=null?`  Prem ${_fmtN(r.premium_amount)}`:"";
+      const k=r.strike_pct!=null?`  K ${Number(r.strike_pct).toFixed(3)}`:"";
+      const v=r.platform_identifier?`  [${r.platform_identifier}]`:"";
+      return `\ud83d\udd14 ${r.notional_ccy} ${tn} ${r.option_type_decoded||""}  N ${_fmtN(r.notional_leg1)}${prem}${k}${v}`;
+    };
+    const pollAlerts=async()=>{
+      try{
+        const rows=await sbFetch("dtcc_sdr",{
+          select:"dissemination_id,event_timestamp,notional_leg1,notional_ccy,premium_amount,strike_pct,opt_tenor,swp_tenor,option_type_decoded,platform_identifier,action_type",
+          notional_ccy:`eq.${activeCcy}`,
+          action_type:"eq.NEWT",
+          order:"event_timestamp.desc",
+          limit:"60",
+        });
+        if(stop||!rows) return;
+        if(seenSdrIds.current===null){ seenSdrIds.current=new Set(rows.map(r=>r.dissemination_id)); return; }
+        const minNot=(sdrAlertMinRef.current||0)*1e6;
+        for(const r of [...rows].reverse()){           // oldest->newest so toasts stack in order
+          if(seenSdrIds.current.has(r.dissemination_id)) continue;
+          seenSdrIds.current.add(r.dissemination_id);
+          if((Number(r.notional_leg1)||0) < minNot) continue;
+          addToast(_fmtAlert(r), "sdr", true);          // sticky — manual dismiss only
+        }
+      }catch(e){ console.warn("[SDR alert]",e); }
+    };
+    pollAlerts();
+    const _ta=setInterval(pollAlerts, 10000);
+    return ()=>{ stop=true; clearInterval(_ta); };
   }, [activeCcy]);
   // Auto-reload fresh mids and log when currency tab changes
   const _lastCcy = React.useRef(null);
@@ -3479,18 +3523,21 @@ export default function App() {
       {/* TOAST NOTIFICATIONS */}
       {toasts.length>0&&(
         <div style={{position:"fixed",top:12,right:12,zIndex:9999,display:"flex",flexDirection:"column",gap:6,pointerEvents:"none"}}>
-          {toasts.map(t=>(
-            <div key={t.id} style={{background:"rgba(180,20,20,.92)",border:"1px solid #ff4040",borderRadius:4,padding:"8px 14px",color:"#fff",fontSize:11,fontWeight:700,fontFamily:"'JetBrains Mono',monospace",boxShadow:"0 0 20px rgba(255,50,50,.4)",animation:"lr .2s ease",maxWidth:340,pointerEvents:"auto"}}>
-              {t.msg}
+          {toasts.map(t=>{
+            const _sdr=t.type==="sdr";
+            return (
+            <div key={t.id} style={{background:_sdr?"rgba(18,66,150,.94)":"rgba(180,20,20,.92)",border:`1px solid ${_sdr?"#3a90e0":"#ff4040"}`,borderRadius:4,padding:"8px 14px",color:"#fff",fontSize:11,fontWeight:700,fontFamily:"'JetBrains Mono',monospace",boxShadow:_sdr?"0 0 20px rgba(40,120,240,.4)":"0 0 20px rgba(255,50,50,.4)",animation:"lr .2s ease",maxWidth:360,pointerEvents:"auto",display:"flex",alignItems:"center",gap:10}}>
+              <span style={{flex:1}}>{t.msg}</span>
+              {t.sticky&&<span onClick={()=>dismissToast(t.id)} title="dismiss" style={{cursor:"pointer",fontWeight:900,fontSize:13,lineHeight:1,opacity:.85,padding:"0 2px"}}>{"\u2715"}</span>}
             </div>
-          ))}
+          );})}
         </div>
       )}
 
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v(1)</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0704e</span>
       </div>
 
       {/* HEADER */}
@@ -3500,6 +3547,11 @@ export default function App() {
           {[["swaption","SWAPTION"],["capfloor","CAP & FLOOR"]].map(([pid,plbl])=><button key={pid} onClick={()=>setActiveProduct(pid)} style={{background:activeProduct===pid?"rgba(30,80,180,.45)":"transparent",border:`1px solid ${activeProduct===pid?"rgba(60,130,230,.5)":"transparent"}`,color:activeProduct===pid?"#ccd8e4":"#3a6080",padding:"3px 10px",borderRadius:3,cursor:"pointer",fontSize:11,fontWeight:700,letterSpacing:".1em",fontFamily:"inherit"}}>{plbl}{pid==="capfloor"&&sdrCfCount.total>0&&<span style={{marginLeft:4,background:"rgba(180,90,0,.4)",border:"1px solid rgba(255,140,0,.4)",borderRadius:3,fontSize:7,padding:"0 3px",color:"#ff9040",fontWeight:700}}>{sdrCfCount.total}</span>}</button>)}
         </div>
         <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
+          <div style={{display:"flex",alignItems:"center",gap:4}} title="Min notional for new-trade toast alerts (current ccy, NEWT only)">
+            <span style={{color:"#3a6080",fontSize:8,fontWeight:700,letterSpacing:".1em"}}>ALERT ≥</span>
+            <input type="number" min="0" value={sdrAlertMinM} onChange={e=>setSdrAlertMinM(Math.max(0,Number(e.target.value)||0))} style={{width:46,background:"#0a1525",border:"1px solid #1e3450",color:"#90c8f0",fontSize:10,fontFamily:"inherit",padding:"2px 4px",borderRadius:3}}/>
+            <span style={{color:"#3a6080",fontSize:8,fontWeight:700}}>M</span>
+          </div>
           <button className={`btn${showExpMgr?" on":""}`} onClick={()=>setShowExpMgr(v=>!v)}>
             EXPIRIES {hiddenExpiries.size>0?`(${hiddenExpiries.size} hidden)`:""}
           </button>
