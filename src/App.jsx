@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 0704t
+// RateEdge vol-blotter 0704u
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -3684,7 +3684,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0704t</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0704u</span>
       </div>
 
       {/* HEADER */}
@@ -3970,20 +3970,20 @@ export default function App() {
                             {(()=>{
                               const spr=spreadImplied[`${exp}|${ten}`];
                               if(!spr) return null;
-                              const hasLocks=spr.locks&&spr.locks.length;
-                              const hasSpr=spr.spreads&&spr.spreads.length;
+                              const hasLocks=!!(spr.locks&&spr.locks.length);
+                              const hasSpr=!!(spr.spreads&&spr.spreads.length);
                               if(!hasLocks&&!hasSpr) return null;
                               return (<div style={{marginBottom:2}}>
                                 {hasLocks&&spr.locks.map((l,li)=>(
                                   <div key={"lk"+li} style={{textAlign:"center",lineHeight:"10px",marginBottom:1}}>
                                     <span style={{color:l.unlegged?"#e0c040":"#b080f0",fontWeight:700,fontSize:10}}>{fmtNum(l.lock)}{l.unlegged?"L":""}</span>
                                     {l.bank&&<span style={{color:bkc(l.bank),fontSize:6,marginLeft:1,fontWeight:700}}>{l.bank}</span>}
-                                    {isHov&&<span style={{color:"#b88af0",fontSize:9,marginLeft:2,fontWeight:700}}>({l.name})</span>}
+                                    {isHov&&<span style={{color:"#b88af0",fontSize:11,marginLeft:2,fontWeight:700}}>({l.name})</span>}
                                   </div>
                                 ))}
                                 {hasSpr&&spr.spreads.map((s,si)=>(
                                   <div key={si} style={{textAlign:"center",lineHeight:"10px",marginBottom:2,borderBottom:si<spr.spreads.length-1?"1px solid #1a1030":"none",paddingBottom:1}}>
-                                    {isHov&&<div style={{color:"#b88af0",fontSize:9,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</div>}
+                                    {isHov&&<div style={{color:"#b88af0",fontSize:11,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</div>}
                                     <div>
                                       {s.bid!=null?<span style={{color:"#00c040",fontWeight:700,fontSize:10}}>{fmtNum(s.bid,2)}</span>:s.rawBid!=null?<span style={{color:"#e0c040",fontWeight:700,fontSize:10}}>{fmtNum(s.rawBid,2)}</span>:<span style={{color:"#2a3050"}}>—</span>}
                                       {(s.bid!=null||s.rawBid!=null)&&s.bidBank&&<span style={{color:bkc(s.bidBank),fontSize:6,marginLeft:1,fontWeight:700}}>{s.bidBank}</span>}
