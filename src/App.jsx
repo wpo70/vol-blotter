@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 0704r
+// RateEdge vol-blotter 0704s
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -2919,20 +2919,23 @@ export default function App() {
       if (!isFinite(lock) || !isFinite(rA) || !isFinite(rB) || rB === 0) return;
       const R = rA / rB;
       const live = getLiveQ(L[0].exp, L[0].ten);
+      const bidLegged = live.liveBid != null;     // is there a live outright to leg each side against?
+      const offerLegged = live.liveOffer != null;
       const k1 = `${L[1].exp.toLowerCase()}|${L[1].ten}`;   // implied prints on the OFFER(unlocked) leg cell
       const k0 = `${L[0].exp.toLowerCase()}|${L[0].ten}`;   // locked(bid) leg cell — show the Lock here
       if (!merged[k0]) merged[k0] = { spreads: [], locks: [], bid: null, offer: null, bidBank: null, offerBank: null };
-      merged[k0].locks.push({ name: entry.name, lock: lock, bank: L[0].bank || "" });
+      // unlegged (no live either side) -> lock shown yellow with an "L"; else purple
+      merged[k0].locks.push({ name: entry.name, lock: lock, bank: L[0].bank || "", unlegged: (!bidLegged && !offerLegged) });
       if (!merged[k1]) merged[k1] = { spreads: [], locks: [], bid: null, offer: null, bidBank: null, offerBank: null };
       const cell = merged[k1];
-      const s = { name: entry.name, bid: null, offer: null, bidBank: L[0].bank || "", offerBank: L[1].bank || "", yellowBid: false, yellowOffer: false };
+      const s = { name: entry.name, bid: null, offer: null, rawBid: null, rawOffer: null, bidBank: L[0].bank || "", offerBank: L[1].bank || "" };
       if (isFinite(bidQ)) {
-        if (live.liveBid != null) { s.bid = +(bidQ - (lock - live.liveBid) * R).toFixed(4); if (cell.bid == null || s.bid > cell.bid) { cell.bid = s.bid; cell.bidBank = s.bidBank; } }
-        else s.yellowBid = true;
+        if (bidLegged) { s.bid = +(bidQ - (lock - live.liveBid) * R).toFixed(4); if (cell.bid == null || s.bid > cell.bid) { cell.bid = s.bid; cell.bidBank = s.bidBank; } }
+        else s.rawBid = bidQ;     // no outright to leg -> show the raw spread bid (yellow)
       }
       if (isFinite(offQ)) {
-        if (live.liveOffer != null) { s.offer = +(offQ + (live.liveOffer - lock) * R).toFixed(4); if (cell.offer == null || s.offer < cell.offer) { cell.offer = s.offer; cell.offerBank = s.offerBank; } }
-        else s.yellowOffer = true;
+        if (offerLegged) { s.offer = +(offQ + (live.liveOffer - lock) * R).toFixed(4); if (cell.offer == null || s.offer < cell.offer) { cell.offer = s.offer; cell.offerBank = s.offerBank; } }
+        else s.rawOffer = offQ;   // no outright to leg -> show the raw spread offer (yellow)
       }
       cell.spreads.push(s);   // keep every spread distinct (named), never merge into one quote
     });
@@ -3553,7 +3556,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0704r</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0704s</span>
       </div>
 
       {/* HEADER */}
@@ -3843,7 +3846,7 @@ export default function App() {
                               return (<div style={{marginBottom:2}}>
                                 {hasLocks&&spr.locks.map((l,li)=>(
                                   <div key={"lk"+li} style={{textAlign:"center",lineHeight:"10px",marginBottom:1}}>
-                                    <span style={{color:"#b080f0",fontWeight:700,fontSize:10}}>{fmtNum(l.lock)}</span>
+                                    <span style={{color:l.unlegged?"#e0c040":"#b080f0",fontWeight:700,fontSize:10}}>{fmtNum(l.lock)}{l.unlegged?"L":""}</span>
                                     {l.bank&&<span style={{color:bkc(l.bank),fontSize:6,marginLeft:1,fontWeight:700}}>{l.bank}</span>}
                                     {isHov&&<span style={{color:"#b88af0",fontSize:9,marginLeft:2,fontWeight:700}}>({l.name})</span>}
                                   </div>
@@ -3852,11 +3855,11 @@ export default function App() {
                                   <div key={si} style={{textAlign:"center",lineHeight:"10px",marginBottom:2,borderBottom:si<spr.spreads.length-1?"1px solid #1a1030":"none",paddingBottom:1}}>
                                     {isHov&&<div style={{color:"#b88af0",fontSize:9,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</div>}
                                     <div>
-                                      {s.bid!=null?<span style={{color:"#00c040",fontWeight:700,fontSize:10}}>{fmtNum(s.bid,2)}</span>:s.yellowBid?<span style={{color:"#e0c040",fontWeight:700,fontSize:9}}>bid</span>:<span style={{color:"#2a3050"}}>—</span>}
-                                      {(s.bid!=null||s.yellowBid)&&s.bidBank&&<span style={{color:bkc(s.bidBank),fontSize:6,marginLeft:1,fontWeight:700}}>{s.bidBank}</span>}
+                                      {s.bid!=null?<span style={{color:"#00c040",fontWeight:700,fontSize:10}}>{fmtNum(s.bid,2)}</span>:s.rawBid!=null?<span style={{color:"#e0c040",fontWeight:700,fontSize:10}}>{fmtNum(s.rawBid,2)}</span>:<span style={{color:"#2a3050"}}>—</span>}
+                                      {(s.bid!=null||s.rawBid!=null)&&s.bidBank&&<span style={{color:bkc(s.bidBank),fontSize:6,marginLeft:1,fontWeight:700}}>{s.bidBank}</span>}
                                       <span style={{color:"#2a3050",margin:"0 2px"}}>/</span>
-                                      {s.offer!=null?<span style={{color:"#ff8c00",fontWeight:700,fontSize:10}}>{fmtNum(s.offer,2)}</span>:s.yellowOffer?<span style={{color:"#e0c040",fontWeight:700,fontSize:9}}>offer</span>:<span style={{color:"#2a3050"}}>—</span>}
-                                      {(s.offer!=null||s.yellowOffer)&&s.offerBank&&<span style={{color:bkc(s.offerBank),fontSize:6,marginLeft:1,fontWeight:700}}>{s.offerBank}</span>}
+                                      {s.offer!=null?<span style={{color:"#ff8c00",fontWeight:700,fontSize:10}}>{fmtNum(s.offer,2)}</span>:s.rawOffer!=null?<span style={{color:"#e0c040",fontWeight:700,fontSize:10}}>{fmtNum(s.rawOffer,2)}</span>:<span style={{color:"#2a3050"}}>—</span>}
+                                      {(s.offer!=null||s.rawOffer!=null)&&s.offerBank&&<span style={{color:bkc(s.offerBank),fontSize:6,marginLeft:1,fontWeight:700}}>{s.offerBank}</span>}
                                     </div>
                                   </div>
                                 ))}
