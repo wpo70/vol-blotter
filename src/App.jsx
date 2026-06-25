@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 0704u
+// RateEdge vol-blotter 0704v
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -2761,7 +2761,7 @@ function SdrTapePanel() {
 }
 
 export default function App() {
-  const [quotes, setQuotes]               = useState({});  // always start fresh - history preserves quotes
+  const [quotes, setQuotes]               = useState(()=>{ try { const q=loadLS("vbl_quotes_USD",{}); return (q&&typeof q==="object")?q:{}; } catch { return {}; } });  // restored per-ccy
   const [referred, setReferred]           = useState(new Set());   // Set of "k|side|id" that are referred
   const [activeCell, setActiveCell]       = useState(null);
   const [editVals, setEditVals]           = useState({ bid:"", offer:"", bidBank:"", offerBank:"" });
@@ -3245,6 +3245,14 @@ export default function App() {
     const _ta=setInterval(pollAlerts, 10000);
     return ()=>{ stop=true; clearInterval(_ta); };
   }, [activeCcy]);
+  // Restore this currency's outright quotes whenever the currency changes (any path)
+  const _qCcy = React.useRef("USD");
+  useEffect(() => {
+    if (_qCcy.current === activeCcy) return;
+    _qCcy.current = activeCcy;
+    try { const saved = loadLS(`vbl_quotes_${activeCcy}`, {}); setQuotes((saved && typeof saved==="object") ? saved : {}); }
+    catch { setQuotes({}); }
+  }, [activeCcy]);
   // Auto-reload fresh mids and log when currency tab changes
   const _lastCcy = React.useRef(null);
   useEffect(() => {
@@ -3350,18 +3358,15 @@ export default function App() {
 
   const switchCcy = (ccy) => {
     if (ccy === activeCcy) return;
-    // save current ccy state to memory + localStorage
+    // save current ccy state to memory + localStorage (quotes restored by the activeCcy effect)
     setCcyStore(prev => ({
       ...prev,
       [activeCcy]: { quotes, log, referred }
     }));
     try { localStorage.setItem(`vbl_log4_${activeCcy}`, JSON.stringify(log.slice(0,300))); } catch {}
     try { localStorage.setItem(`vbl_quotes_${activeCcy}`, JSON.stringify(quotes)); } catch {}
-    // load new ccy state - from memory first, then localStorage
     const stored = ccyStore[ccy];
     const savedLog = loadLS(`vbl_log4_${ccy}`,[]).map(l=>({...l,ts:new Date(l.ts)}));
-    const savedQuotes = (stored && stored.quotes) ? stored.quotes : loadLS(`vbl_quotes_${ccy}`, {});
-    setQuotes(savedQuotes);
     setLog(savedLog);
     setReferred(stored?.referred || new Set());
     setActiveCcy(ccy);
@@ -3684,7 +3689,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0704u</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0704v</span>
       </div>
 
       {/* HEADER */}
