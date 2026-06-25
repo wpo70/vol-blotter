@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 0704s
+// RateEdge vol-blotter 0704t
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -2632,6 +2632,134 @@ function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatfor
 }
 
 
+// ── SDR TAPE: all SDR trades for the session (USD + EUR), times in local tz ──
+function SdrTapePanel() {
+  const [allRows, setAllRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr]         = useState(null);
+  const [ccyF, setCcyF]       = useState("BOTH");   // USD | EUR | BOTH
+  const [sessIdx, setSessIdx] = useState(0);        // 0 = latest session, 1 = previous
+  const [typeF, setTypeF]     = useState("ALL");
+  const TZ = "Australia/Brisbane";
+
+  const fetchTape = useCallback(async () => {
+    if (!SUPABASE_URL || !SUPABASE_ANON) { setErr("No DB connection"); return; }
+    setLoading(true); setErr(null);
+    try {
+      const from = new Date(Date.now() - 5*864e5).toISOString().slice(0,10);
+      const base = {
+        select: "dissemination_id,event_timestamp,trade_date,notional_leg1,premium_amount,strike_pct,opt_tenor,swp_tenor,notional_ccy,option_type_decoded,platform_identifier,action_type",
+        action_type: "eq.NEWT",
+        trade_date: `gte.${from}`,
+        order: "event_timestamp.desc",
+        limit: "1000",
+      };
+      const pull = async (ccy) => {
+        const out = [];
+        for (let off=0; off<3000; off+=1000) {
+          const page = await sbFetch("dtcc_sdr", {...base, notional_ccy:`eq.${ccy}`, offset:String(off)});
+          if (!page || !page.length) break;
+          out.push(...page);
+          if (page.length < 1000) break;
+        }
+        return out;
+      };
+      const [usd, eur] = await Promise.all([pull("USD"), pull("EUR")]);
+      setAllRows([...usd, ...eur]);
+    } catch(e) { setErr(String((e&&e.message)||e)); }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchTape(); const t = setInterval(fetchTape, 60000); return ()=>clearInterval(t); }, [fetchTape]);
+
+  const sessions = useMemo(() => [...new Set(allRows.map(r=>r.trade_date).filter(Boolean))].sort().reverse(), [allRows]);
+  const sessionDate = sessions[sessIdx] || sessions[0] || null;
+
+  const rows = useMemo(() => {
+    let base = allRows.filter(r => r.trade_date === sessionDate);
+    if (ccyF !== "BOTH") base = base.filter(r => r.notional_ccy === ccyF);
+    const payers = base.filter(r => r.option_type_decoded === "CALL");
+    const rcvrs  = base.filter(r => r.option_type_decoded === "PUT");
+    const pairedR = new Set(), pairedP = new Set();
+    const out = [];
+    payers.forEach(p => {
+      const sp = Math.round(parseFloat(p.strike_pct||0)*100)/100, tp = new Date(p.event_timestamp).getTime();
+      let m = rcvrs.find(r => !pairedR.has(r.dissemination_id) && r.swp_tenor===p.swp_tenor && r.opt_tenor===p.opt_tenor && Math.abs(Math.round(parseFloat(r.strike_pct||0)*100)/100 - sp)<=0.01 && Math.abs(new Date(r.event_timestamp).getTime()-tp)<=120000);
+      let typ = "Straddle";
+      if (!m) { m = rcvrs.find(r => !pairedR.has(r.dissemination_id) && r.swp_tenor===p.swp_tenor && r.opt_tenor===p.opt_tenor && Math.abs(new Date(r.event_timestamp).getTime()-tp)<=120000); typ = "Strangle"; }
+      if (m) { pairedR.add(m.dissemination_id); pairedP.add(p.dissemination_id);
+        out.push({...p, _type:typ, _prem:(parseFloat(p.premium_amount||0)+parseFloat(m.premium_amount||0))||null, _strike2:m.strike_pct}); }
+    });
+    base.forEach(r => {
+      if (pairedR.has(r.dissemination_id) || pairedP.has(r.dissemination_id)) return;
+      let typ;
+      if (!r.swp_tenor || String(r.swp_tenor).trim()==="") typ = r.option_type_decoded==="PUT" ? "Floor" : "Cap";
+      else typ = r.option_type_decoded==="CALL" ? "Payer" : r.option_type_decoded==="PUT" ? "Receiver" : (r.option_type_decoded||"—");
+      out.push({...r, _type:typ, _prem:parseFloat(r.premium_amount||0)||null});
+    });
+    out.sort((a,b)=> new Date(b.event_timestamp) - new Date(a.event_timestamp));
+    return typeF==="ALL" ? out : out.filter(r => r._type===typeF);
+  }, [allRows, sessionDate, ccyF, typeF]);
+
+  const fmtT = (ts)=>{ try { return new Intl.DateTimeFormat("en-GB",{timeZone:TZ,hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}).format(new Date(ts)); } catch { return ""; } };
+  const fmtDate = (d)=>{ if(!d) return "—"; try { return new Intl.DateTimeFormat("en-GB",{timeZone:TZ,weekday:"short",day:"2-digit",month:"short"}).format(new Date(d+"T12:00:00Z")); } catch { return d; } };
+  const fmtN = (n)=> (n==null||n==="") ? "—" : (Math.abs(+n)>=1e9 ? `${(+n/1e9).toFixed(2)}B` : Math.abs(+n)>=1e6 ? `${(+n/1e6).toFixed(0)}M` : `${Math.round(+n)}`);
+  const tCol = (t)=>({Payer:"#00c040",Receiver:"#ff8c00",Straddle:"#c080f0",Strangle:"#e0a040",Cap:"#40b0e0",Floor:"#e07040"}[t]||"#90a8c0");
+  const cCol = (c)=>({USD:"#5a9fd4",EUR:"#d4af5a"}[c]||"#90a8c0");
+
+  const chip = (on)=>({fontSize:8,padding:"2px 7px",borderRadius:3,cursor:"pointer",fontFamily:"inherit",fontWeight:700,letterSpacing:".05em",
+    border:`1px solid ${on?"rgba(60,130,230,.5)":"#1e3450"}`, background:on?"rgba(30,80,180,.45)":"rgba(15,35,70,.4)", color:on?"#90c8f0":"#406080"});
+  const th = {position:"sticky",top:0,background:"#0a1018",color:"#5a7a98",fontSize:8,fontWeight:700,letterSpacing:".08em",padding:"5px 8px",textAlign:"left",borderBottom:"1px solid #1e3450",zIndex:1};
+  const td = {padding:"3px 8px",fontSize:10,borderBottom:"1px solid #0e1722",whiteSpace:"nowrap"};
+
+  const TYPES = ["ALL","Payer","Receiver","Straddle","Strangle","Cap","Floor"];
+
+  return (
+    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minHeight:0}}>
+      <div style={{padding:"6px 16px",borderBottom:"1px solid #1e3450",display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",flexShrink:0}}>
+        <span style={{color:"#a070d0",fontSize:9,fontWeight:700,letterSpacing:".1em"}}>SDR TAPE</span>
+        <span style={{color:"#2a4060"}}>·</span>
+        <button onClick={()=>setSessIdx(0)} style={chip(sessIdx===0)}>THIS · {fmtDate(sessions[0])}</button>
+        <button onClick={()=>setSessIdx(1)} style={chip(sessIdx===1)} disabled={!sessions[1]}>PREV · {fmtDate(sessions[1])}</button>
+        <span style={{color:"#2a4060"}}>·</span>
+        {["BOTH","USD","EUR"].map(c=><button key={c} onClick={()=>setCcyF(c)} style={chip(ccyF===c)}>{c}</button>)}
+        <span style={{color:"#2a4060"}}>·</span>
+        {TYPES.map(t=><button key={t} onClick={()=>setTypeF(t)} style={{...chip(typeF===t),color:typeF===t?"#90c8f0":(t==="ALL"?"#406080":tCol(t)),fontSize:7,padding:"2px 5px"}}>{t}</button>)}
+        <span style={{marginLeft:"auto",color:"#3a6080",fontSize:8}}>{loading?"loading…":`${rows.length} trades`}</span>
+        <button onClick={fetchTape} style={{...chip(false),fontSize:8}}>↻</button>
+      </div>
+      {err && <div style={{color:"#a04040",fontSize:9,padding:"6px 16px"}}>{err}</div>}
+      <div style={{flex:1,overflow:"auto",minHeight:0}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontFamily:"inherit"}}>
+          <thead>
+            <tr>
+              <th style={th}>TIME (AEST)</th><th style={th}>CCY</th><th style={th}>TYPE</th>
+              <th style={th}>EXP</th><th style={th}>TENOR</th><th style={{...th,textAlign:"right"}}>STRIKE%</th>
+              <th style={{...th,textAlign:"right"}}>NOTIONAL</th><th style={{...th,textAlign:"right"}}>PREMIUM</th><th style={th}>VENUE</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r,i)=>(
+              <tr key={r.dissemination_id||i} style={{background:i%2?"rgba(15,25,40,.3)":"transparent"}}>
+                <td style={{...td,color:"#6a8aa8"}}>{fmtT(r.event_timestamp)}</td>
+                <td style={{...td,color:cCol(r.notional_ccy),fontWeight:700}}>{r.notional_ccy}</td>
+                <td style={{...td,color:tCol(r._type),fontWeight:700}}>{r._type}</td>
+                <td style={{...td,color:"#b0bcc8"}}>{r.opt_tenor||"—"}</td>
+                <td style={{...td,color:"#b0bcc8"}}>{r.swp_tenor||"—"}</td>
+                <td style={{...td,textAlign:"right",color:"#90a8c0"}}>{r.strike_pct!=null?Number(r.strike_pct).toFixed(3):"—"}{r._strike2!=null?` / ${Number(r._strike2).toFixed(3)}`:""}</td>
+                <td style={{...td,textAlign:"right",color:"#c8d4e0",fontWeight:700}}>{fmtN(r.notional_leg1)}</td>
+                <td style={{...td,textAlign:"right",color:"#90a8c0"}}>{fmtN(r._prem)}</td>
+                <td style={{...td,color:bkc(venueName(r.platform_identifier))}}>{venueName(r.platform_identifier)}</td>
+              </tr>
+            ))}
+            {!rows.length && !loading && <tr><td colSpan={9} style={{...td,color:"#3a5070",textAlign:"center",padding:"20px"}}>No trades for this session.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [quotes, setQuotes]               = useState({});  // always start fresh - history preserves quotes
   const [referred, setReferred]           = useState(new Set());   // Set of "k|side|id" that are referred
@@ -3556,14 +3684,14 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0704s</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0704t</span>
       </div>
 
       {/* HEADER */}
       <div style={{background:"#0d1520",borderBottom:"1px solid #253d58",padding:"9px 18px",display:"flex",alignItems:"center",gap:14,flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <div style={{width:7,height:7,borderRadius:"50%",background:"#2080e0",boxShadow:"0 0 8px #2080e055"}}/>
-          {[["swaption","SWAPTION"],["capfloor","CAP & FLOOR"]].map(([pid,plbl])=><button key={pid} onClick={()=>setActiveProduct(pid)} style={{background:activeProduct===pid?"rgba(30,80,180,.45)":"transparent",border:`1px solid ${activeProduct===pid?"rgba(60,130,230,.5)":"transparent"}`,color:activeProduct===pid?"#ccd8e4":"#3a6080",padding:"3px 10px",borderRadius:3,cursor:"pointer",fontSize:11,fontWeight:700,letterSpacing:".1em",fontFamily:"inherit"}}>{plbl}{pid==="capfloor"&&sdrCfCount.total>0&&<span style={{marginLeft:4,background:"rgba(180,90,0,.4)",border:"1px solid rgba(255,140,0,.4)",borderRadius:3,fontSize:7,padding:"0 3px",color:"#ff9040",fontWeight:700}}>{sdrCfCount.total}</span>}</button>)}
+          {[["swaption","SWAPTION"],["capfloor","CAP & FLOOR"],["sdrtape","SDR TAPE"]].map(([pid,plbl])=><button key={pid} onClick={()=>setActiveProduct(pid)} style={{background:activeProduct===pid?"rgba(30,80,180,.45)":"transparent",border:`1px solid ${activeProduct===pid?"rgba(60,130,230,.5)":"transparent"}`,color:activeProduct===pid?"#ccd8e4":"#3a6080",padding:"3px 10px",borderRadius:3,cursor:"pointer",fontSize:11,fontWeight:700,letterSpacing:".1em",fontFamily:"inherit"}}>{plbl}{pid==="capfloor"&&sdrCfCount.total>0&&<span style={{marginLeft:4,background:"rgba(180,90,0,.4)",border:"1px solid rgba(255,140,0,.4)",borderRadius:3,fontSize:7,padding:"0 3px",color:"#ff9040",fontWeight:700}}>{sdrCfCount.total}</span>}</button>)}
         </div>
         <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
           <div style={{display:"flex",alignItems:"center",gap:4}} title="Min notional for new-trade toast alerts (current ccy, NEWT only)">
@@ -3603,7 +3731,7 @@ export default function App() {
 
 
       {/* PRODUCT TABS ROW */}
-      <div style={{background:"#080c14",borderBottom:"1px solid #1e3450",padding:"5px 18px",display:"flex",gap:5,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
+      <div style={{background:"#080c14",borderBottom:"1px solid #1e3450",padding:"5px 18px",display:activeProduct==="sdrtape"?"none":"flex",gap:5,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
         {CCYS.map(ccy=>{const active=activeProduct==="swaption"?activeCcy===ccy:activeCfCcy===ccy;return(<button key={ccy} onClick={()=>activeProduct==="swaption"?switchCcy(ccy):setActiveCfCcy(ccy)} style={{background:active?"rgba(30,80,180,.45)":"rgba(15,35,70,.4)",border:`1px solid ${active?"rgba(60,130,230,.5)":"#1e3450"}`,color:active?"#90c8f0":"#406080",padding:"4px 10px",borderRadius:3,cursor:"pointer",fontFamily:"inherit",fontSize:10,fontWeight:700,display:"flex",alignItems:"center",gap:6}}><img src={`https://flagcdn.com/20x15/${CCY_ISO[ccy]}.png`} width="20" height="15" style={{borderRadius:2,border:"1px solid rgba(255,255,255,.2)",flexShrink:0}} alt={ccy}/><span>{ccy}</span></button>);})}
         {activeProduct==="capfloor" && <>
           <span style={{color:"#253a52",margin:"0 6px"}}>|</span>
@@ -3657,7 +3785,7 @@ export default function App() {
 
       {/* LIVE POSITION BAR */}
       {/* SDR FILTER BAR */}
-      {(()=>{
+      {activeProduct!=="sdrtape" && (()=>{
         const TYPE_LABELS={"CALL":"Payer","PUT":"Receiver","STR":"Straddle","STRG":"Strangle","EC":"Euro Swn","BCALL":"Berm Payer","NSTD":"Non-std","XCS":"XCCY Swn","OTH":"Other"};
         const ACTIONS=["NEWT","MODI","CORR","CANC"];
         const actArr=Array.isArray(sdrFilterAction)?sdrFilterAction:[];
@@ -3725,6 +3853,8 @@ export default function App() {
       <div style={{display:activeProduct==="capfloor"?"flex":"none",flex:1,overflow:"hidden",flexDirection:"column",minHeight:0}}>
         <CapFloorPanel spreadImplied={spreadImplied} ccy={activeCfCcy} subMenu={cfSubMenu} hiddenSt={cfHiddenSt} setHiddenSt={setCfHiddenSt} cfLiveRef={cfLiveRef} cfEodRef={cfEodRef} swpQuotes={quotes} swpReferred={referred} liveStrikeMap={activeCfCcy==="AUD"?liveStrikeMap:null} liveWedgeMids={activeCfCcy==="AUD"?liveWedgeMids:null} livePremMatrix={activeCfCcy==="AUD"?livePremMatrix:null} copiedCfLive={copiedCfLive} setCopiedCfLive={setCopiedCfLive} copiedCfEOD={copiedCfEOD} setCopiedCfEOD={setCopiedCfEOD}/>
       </div>
+      {activeProduct==="sdrtape" && <SdrTapePanel/>}
+
       <div style={{display:activeProduct==="swaption"?"flex":"none",flex:1,overflow:"hidden"}}>
         {/* GRID */}
         <div style={{flex:1,overflow:"auto",padding:"8px 10px"}}>
