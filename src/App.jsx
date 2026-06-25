@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 0704n
+// RateEdge vol-blotter 0704p
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -322,6 +322,13 @@ const USD_PREM = {
 };
 
 const cellKey = (exp, ten) => `${exp}|${ten}`;
+// Show up to `max` decimals but strip trailing zeros (76.5000 -> 76.5, 502.0000 -> 502, 248.5030 -> 248.503).
+const fmtNum = (n, max=4) => {
+  if (n==null || n==="" || !isFinite(Number(n))) return "";
+  let s = Number(n).toFixed(max);
+  if (s.indexOf(".")>=0) s = s.replace(/0+$/,"").replace(/\.$/,"");
+  return s;
+};
 const loadLS  = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
 
 
@@ -2887,7 +2894,10 @@ export default function App() {
       const R = rA / rB;
       const live = getLiveQ(L[0].exp, L[0].ten);
       const k1 = `${L[1].exp.toLowerCase()}|${L[1].ten}`;   // implied prints on the OFFER(unlocked) leg cell
-      if (!merged[k1]) merged[k1] = { spreads: [], bid: null, offer: null, bidBank: null, offerBank: null };
+      const k0 = `${L[0].exp.toLowerCase()}|${L[0].ten}`;   // locked(bid) leg cell — show the Lock here
+      if (!merged[k0]) merged[k0] = { spreads: [], locks: [], bid: null, offer: null, bidBank: null, offerBank: null };
+      merged[k0].locks.push({ name: entry.name, lock: lock, bank: L[0].bank || "" });
+      if (!merged[k1]) merged[k1] = { spreads: [], locks: [], bid: null, offer: null, bidBank: null, offerBank: null };
       const cell = merged[k1];
       const s = { name: entry.name, bid: null, offer: null, bidBank: L[0].bank || "", offerBank: L[1].bank || "", yellowBid: false, yellowOffer: false };
       if (isFinite(bidQ)) {
@@ -3025,10 +3035,14 @@ export default function App() {
   useEffect(()=>{ try{localStorage.setItem("vbl_sdr_alert_min",JSON.stringify(sdrAlertMinM));}catch{} },[sdrAlertMinM]);
   const sdrAlertMinRef = useRef(0);
   useEffect(()=>{ sdrAlertMinRef.current = sdrAlertMinM; },[sdrAlertMinM]);
-  const seenSdrIds = useRef(null);   // null = not yet seeded
+  const seenSdrKeys   = useRef(new Set());   // persistent across ccy switches — NEVER cleared
+  const sdrCcySeeded  = useRef({});          // per-ccy: has the current window been seeded (no-fire)
+  const sdrSessionMs  = useRef(Date.now());  // only alert trades that arrive after the blotter opened
+  const _sdrKeyOf = (r)=> (r.dissemination_id!=null && String(r.dissemination_id))
+        || `${r.notional_ccy}|${r.opt_tenor}|${r.swp_tenor}|${r.notional_leg1}|${r.premium_amount}|${r.strike_pct}|${r.event_timestamp}`;
   useEffect(()=>{
     if(!SUPABASE_URL||!SUPABASE_ANON) return;
-    seenSdrIds.current = null;        // re-seed silently when currency switches
+    const ccy=activeCcy;
     let stop=false;
     const _fmtN=(n)=> n==null?"":(n>=1e9?`${(n/1e9).toFixed(2)}B`:n>=1e6?`${(n/1e6).toFixed(0)}M`:`${Math.round(n)}`);
     const _fmtAlert=(r)=>{
@@ -3042,19 +3056,27 @@ export default function App() {
       try{
         const rows=await sbFetch("dtcc_sdr",{
           select:"dissemination_id,event_timestamp,notional_leg1,notional_ccy,premium_amount,strike_pct,opt_tenor,swp_tenor,option_type_decoded,platform_identifier,action_type",
-          notional_ccy:`eq.${activeCcy}`,
+          notional_ccy:`eq.${ccy}`,
           action_type:"eq.NEWT",
           order:"event_timestamp.desc",
           limit:"60",
         });
         if(stop||!rows) return;
-        if(seenSdrIds.current===null){ seenSdrIds.current=new Set(rows.map(r=>r.dissemination_id)); return; }
+        // First poll for this ccy: seed the current window into the persistent set, fire nothing.
+        if(!sdrCcySeeded.current[ccy]){
+          rows.forEach(r=>seenSdrKeys.current.add(_sdrKeyOf(r)));
+          sdrCcySeeded.current[ccy]=true;
+          return;
+        }
         const minNot=(sdrAlertMinRef.current||0)*1e6;
-        for(const r of [...rows].reverse()){           // oldest->newest so toasts stack in order
-          if(seenSdrIds.current.has(r.dissemination_id)) continue;
-          seenSdrIds.current.add(r.dissemination_id);
+        for(const r of [...rows].reverse()){            // oldest->newest so toasts stack in order
+          const key=_sdrKeyOf(r);
+          if(seenSdrKeys.current.has(key)) continue;     // already shown/dismissed this session
+          seenSdrKeys.current.add(key);
+          const ts=Date.parse(r.event_timestamp);
+          if(isFinite(ts) && ts < sdrSessionMs.current) continue;   // ignore anything older than this session
           if((Number(r.notional_leg1)||0) < minNot) continue;
-          addToast(_fmtAlert(r), "sdr", true);          // sticky — manual dismiss only
+          addToast(_fmtAlert(r), "sdr", true);           // sticky — manual dismiss only
         }
       }catch(e){ console.warn("[SDR alert]",e); }
     };
@@ -3501,7 +3523,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0704n</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0704p</span>
       </div>
 
       {/* HEADER */}
@@ -3706,7 +3728,7 @@ export default function App() {
                     const hasOff   = offers.length>0;
                     const both     = hasBid&&hasOff;
                     const cross    = both && bids[0].price>=offers[0].price;
-                    const dispMid  = viewMode==="premium" ? prem?.toFixed(4) : mid?.toFixed(4);
+                    const dispMid  = viewMode==="premium" ? fmtNum(prem) : fmtNum(mid);
 
                     // Base = premium heatmap, override with quote state colour
                     let bg = heatBg(viewMode==="premium" ? prem : mid, viewMode==="premium" ? PREM_MIN : VOL_MIN, viewMode==="premium" ? PREM_MAX : VOL_MAX);
@@ -3727,9 +3749,10 @@ export default function App() {
                     return (
                       <td key={ten} className="hv"
                         data-sdr={(_sdr&&_sdr.ts>=tradingDayStartMs)?JSON.stringify(_sdrArr):null}
-                        onClick={()=>!isActive && openCell(exp,ten)}
-                        onMouseEnter={e=>{clearTimeout(sdrDismissRef.current);setHoveredCell(k);try{const _d=e.currentTarget.getAttribute("data-sdr");if(_d){const _a=JSON.parse(_d);setSdrHover({trades:_a,x:e.clientX,y:e.clientY});}}catch(err){}}}
-                        onMouseLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget)){setHoveredCell(null);clearTimeout(sdrDismissRef.current);sdrDismissRef.current=setTimeout(()=>setSdrHover(null),150);}}}
+                        onClick={()=>{setSdrHover(null); if(!isActive) openCell(exp,ten);}}
+                        onContextMenu={e=>{const _a=(window.__sdrFlash||{})[k]; if(_a&&_a.length){e.preventDefault(); setSdrHover({trades:_a,x:e.clientX,y:e.clientY});} else { setSdrHover(null); }}}
+                        onMouseEnter={e=>{setHoveredCell(k);}}
+                        onMouseLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget)){setHoveredCell(null);}}}
                         style={{background:bg,border:`1px solid ${bdr}`,padding:"2px 2px",position:"relative",transition:"background .1s",cursor:"pointer",minWidth:88,verticalAlign:"top"}}>
 
                         {isActive ? (
@@ -3776,7 +3799,7 @@ export default function App() {
                             </div>
                           </div>
                         ) : (
-                          <div onMouseEnter={e=>{clearTimeout(sdrDismissRef.current);const _a=(window.__sdrFlash||{})[k];if(_a&&_a.length){setSdrHover({trades:_a,x:e.clientX,y:e.clientY});}else{setHoveredCell(k);}}} style={{display:"flex",flexDirection:"column",padding:"2px 3px",gap:0,minHeight:22}}>
+                          <div onMouseEnter={()=>setHoveredCell(k)} style={{display:"flex",flexDirection:"column",padding:"2px 3px",gap:0,minHeight:22}}>
                             {isHov && <div style={{textAlign:"center",color:"#3a80b8",fontSize:7,marginBottom:1}}>fwd {FWD[exp]?.[ti]?.toFixed(3)??"--"}%</div>}
                             <div style={{textAlign:"center",color:(hasBid||hasOff)?"#508090":"#68a0ba",fontSize:(hasBid||hasOff)?8:11,fontWeight:(hasBid||hasOff)?400:500,opacity:(hasBid||hasOff)?.45:1,marginBottom:(hasBid||hasOff)?1:0}}>
                               {dispMid ?? "--"}
@@ -3787,16 +3810,26 @@ export default function App() {
 
                             {(()=>{
                               const spr=spreadImplied[`${exp}|${ten}`];
-                              if(!spr||!spr.spreads||!spr.spreads.length) return null;
+                              if(!spr) return null;
+                              const hasLocks=spr.locks&&spr.locks.length;
+                              const hasSpr=spr.spreads&&spr.spreads.length;
+                              if(!hasLocks&&!hasSpr) return null;
                               return (<div style={{marginBottom:2}}>
-                                {spr.spreads.map((s,si)=>(
+                                {hasLocks&&spr.locks.map((l,li)=>(
+                                  <div key={"lk"+li} style={{textAlign:"center",lineHeight:"10px",marginBottom:1}}>
+                                    <span style={{color:"#b080f0",fontWeight:700,fontSize:10}}>{fmtNum(l.lock)}</span>
+                                    {l.bank&&<span style={{color:bkc(l.bank),fontSize:6,marginLeft:1,fontWeight:700}}>{l.bank}</span>}
+                                    {isHov&&<span style={{color:"#8050c0",fontSize:7,marginLeft:2}}>({l.name})</span>}
+                                  </div>
+                                ))}
+                                {hasSpr&&spr.spreads.map((s,si)=>(
                                   <div key={si} style={{textAlign:"center",lineHeight:"10px",marginBottom:2,borderBottom:si<spr.spreads.length-1?"1px solid #1a1030":"none",paddingBottom:1}}>
-                                    <div style={{color:"#a070d0",fontSize:7,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</div>
+                                    {isHov&&<div style={{color:"#a070d0",fontSize:7,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</div>}
                                     <div>
-                                      {s.bid!=null?<span style={{color:"#00c040",fontWeight:700,fontSize:10}}>{s.bid.toFixed(2)}</span>:s.yellowBid?<span style={{color:"#e0c040",fontWeight:700,fontSize:9}}>bid</span>:<span style={{color:"#2a3050"}}>—</span>}
+                                      {s.bid!=null?<span style={{color:"#00c040",fontWeight:700,fontSize:10}}>{fmtNum(s.bid,2)}</span>:s.yellowBid?<span style={{color:"#e0c040",fontWeight:700,fontSize:9}}>bid</span>:<span style={{color:"#2a3050"}}>—</span>}
                                       {(s.bid!=null||s.yellowBid)&&s.bidBank&&<span style={{color:bkc(s.bidBank),fontSize:6,marginLeft:1,fontWeight:700}}>{s.bidBank}</span>}
                                       <span style={{color:"#2a3050",margin:"0 2px"}}>/</span>
-                                      {s.offer!=null?<span style={{color:"#ff8c00",fontWeight:700,fontSize:10}}>{s.offer.toFixed(2)}</span>:s.yellowOffer?<span style={{color:"#e0c040",fontWeight:700,fontSize:9}}>offer</span>:<span style={{color:"#2a3050"}}>—</span>}
+                                      {s.offer!=null?<span style={{color:"#ff8c00",fontWeight:700,fontSize:10}}>{fmtNum(s.offer,2)}</span>:s.yellowOffer?<span style={{color:"#e0c040",fontWeight:700,fontSize:9}}>offer</span>:<span style={{color:"#2a3050"}}>—</span>}
                                       {(s.offer!=null||s.yellowOffer)&&s.offerBank&&<span style={{color:bkc(s.offerBank),fontSize:6,marginLeft:1,fontWeight:700}}>{s.offerBank}</span>}
                                     </div>
                                   </div>
@@ -3808,7 +3841,7 @@ export default function App() {
                               const ref = isReferred(k,"bids",q.id);
                               return (
                                 <div key={q.id} className="qrow" style={{display:"flex",alignItems:"center",justifyContent:"center",gap:2,marginBottom:1}}>
-                                  <span className={ref?"referred-price":""} style={{color:ref?"#1a6030":cross&&i===0?"#5090e0":"#00c040",fontWeight:700,fontSize:10}}>{q.price.toFixed(4)}</span>
+                                  <span className={ref?"referred-price":""} style={{color:ref?"#1a6030":cross&&i===0?"#5090e0":"#00c040",fontWeight:700,fontSize:10}}>{fmtNum(q.price)}</span>
                                   {isHov && q.bank && <span style={{color:bkc(q.bank),fontSize:8,fontWeight:700}}>{q.bank}</span>}
                                   {isHov && (
                                     <span className="qrow-actions" style={{display:"flex",gap:2,alignItems:"center"}}>
@@ -3825,7 +3858,7 @@ export default function App() {
 
                             {both && (
                               <div style={{textAlign:"center",color:"#253a52",fontSize:8,lineHeight:"10px",marginBottom:1}}>
-                                {cross ? <span style={{color:"#80b8ff",fontSize:7,fontWeight:700}}>CROSS</span> : `${(offers[0].price-bids[0].price).toFixed(4)}`}
+                                {cross ? <span style={{color:"#80b8ff",fontSize:7,fontWeight:700}}>CROSS</span> : fmtNum(offers[0].price-bids[0].price)}
                               </div>
                             )}
 
@@ -3834,7 +3867,7 @@ export default function App() {
                               const ref = isReferred(k,"offers",q.id);
                               return (
                                 <div key={q.id} className="qrow" style={{display:"flex",alignItems:"center",justifyContent:"center",gap:2,marginBottom:1}}>
-                                  <span className={ref?"referred-price":""} style={{color:ref?"#7a4010":cross&&i===0?"#5090e0":"#ff8c00",fontWeight:700,fontSize:10}}>{q.price.toFixed(4)}</span>
+                                  <span className={ref?"referred-price":""} style={{color:ref?"#7a4010":cross&&i===0?"#5090e0":"#ff8c00",fontWeight:700,fontSize:10}}>{fmtNum(q.price)}</span>
                                   {isHov && q.bank && <span style={{color:bkc(q.bank),fontSize:8,fontWeight:700}}>{q.bank}</span>}
                                   {isHov && (
                                     <span className="qrow-actions" style={{display:"flex",gap:2,alignItems:"center"}}>
