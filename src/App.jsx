@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 0704k
+// RateEdge vol-blotter 0704l
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -2624,13 +2624,11 @@ export default function App() {
   const [sdrFilterPlatform, setSdrFilterPlatform] = useState(()=>loadLS("vbl_sdr_venue",[]));
   const [sdrFilterAction,   setSdrFilterAction]   = useState([]);
   const [spreadName,   setSpreadName]   = useState("");
-  // Package quote (the spread bid/offer) + bank per side
-  const [spreadQuote,  setSpreadQuote]  = useState({bid:"", offer:"", bidBank:"", offerBank:""});
-  // [0] = LOCKED leg (carries Lock; its live bid/offer auto-pull from the matrix)
-  // [1] = UNLOCKED leg (the implied bid/offer prints on this cell)
+  const [spreadTwoWay, setSpreadTwoWay] = useState(false);
+  const [spreadCounter, setSpreadCounter] = useState({bid:"",offer:"",bank:""});
   const [spreadLegs,   setSpreadLegs]   = useState([
-    {exp:"1y", ten:"1Y",  lock:"", ratio:"8"},
-    {exp:"1y", ten:"10Y", ratio:"1"}
+    {exp:"1y", ten:"1Y",  spreadPx:"", ratio:"8", bank:"", side:"bid"},
+    {exp:"1y", ten:"10Y", spreadPx:"", ratio:"1", bank:"", side:"offer"}
   ]);
   const [spreadImplied, setSpreadImplied] = useState({});
   const [spreadResult,  setSpreadResult]  = useState(null);
@@ -2841,6 +2839,7 @@ export default function App() {
       m[exp] = TENORS.map((t, ti) => {
         const cellKey = `${exp}|${t}`;
         if (overrides[cellKey] != null) return overrides[cellKey];
+        if (activeCcy !== "AUD") return null;   // never AUD-scale a non-AUD premium
         const liveVol   = liveMidMatrix[exp]?.[ti];
         const staticVol = AUD_MID[exp]?.[ti];
         const staticPrem = AUD_PREM[exp]?.[ti];
@@ -2849,7 +2848,7 @@ export default function App() {
       });
     });
     return m;
-  }, [liveMidMatrix, livePremData, liveWedgeMids]);
+  }, [liveMidMatrix, livePremData, liveWedgeMids, activeCcy]);
   const PREMIUM  = livePremMatrix ? livePremMatrix : (CCY_PREM[activeCcy] || AUD_PREM);
   const [VOL_MIN,  VOL_MAX]  = CCY_VOL_RANGE[activeCcy]  || [59,87];
   const [PREM_MIN, PREM_MAX] = CCY_PREM_RANGE[activeCcy] || [6,1700];
@@ -2860,52 +2859,8 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem("vbl_otm2", JSON.stringify(otmQuotes.slice(0,200))); } catch {} }, [otmQuotes]);
   useEffect(() => { try { localStorage.setItem("vbl_spread_log", JSON.stringify(spreadLog.slice(0,100))); } catch {} }, [spreadLog]);
 
-  // Recompute spread implied prices when quotes or referred change.
-  // Model: leg[0]=LOCKED (Lock + live-from-matrix), leg[1]=UNLOCKED (implied prints here).
-  //   Impl Bid   = SpreadBid   - (Lock - LiveBid)  * (ratioA/ratioB)
-  //   Impl Offer = SpreadOffer + (LiveOffer - Lock) * (ratioA/ratioB)
-  // No live bid/offer on the locked leg -> mark that side yellow (direction only).
-  useEffect(() => {
-    if (!spreadLog.length) { setSpreadImplied({}); return; }
-    const ccyLog = spreadLog.filter(e => !e.ccy || e.ccy === activeCcy);
-    if (!ccyLog.length) { setSpreadImplied({}); return; }
-    const getLiveQ = (exp, ten) => {
-      const k = cellKey(exp.toLowerCase(), ten);
-      const cell = quotes[k];
-      if (!cell) return { liveBid: null, liveOffer: null, liveBidBank: null, liveOfferBank: null };
-      const b = (cell.bids || []).filter(q => !referred.has(`${k}|bids|${q.id}`)).sort((a, c) => c.price - a.price);
-      const o = (cell.offers || []).filter(q => !referred.has(`${k}|offers|${q.id}`)).sort((a, c) => a.price - c.price);
-      return { liveBid: b[0]?.price ?? null, liveOffer: o[0]?.price ?? null, liveBidBank: b[0]?.bank ?? null, liveOfferBank: o[0]?.bank ?? null };
-    };
-    const merged = {};
-    ccyLog.forEach(entry => {
-      const L = entry.legs || [];
-      if (L.length < 2) return;
-      const lock = parseFloat(L[0].lock);
-      const rA = parseFloat(L[0].ratio), rB = parseFloat(L[1].ratio);
-      const q = entry.quote || {};
-      const qBid = parseFloat(q.bid), qOff = parseFloat(q.offer);
-      if (!isFinite(lock) || !isFinite(rA) || !isFinite(rB) || rB === 0) return;
-      const R = rA / rB;
-      const live = getLiveQ(L[0].exp, L[0].ten);                 // locked leg live, from matrix
-      const k1 = `${L[1].exp.toLowerCase()}|${L[1].ten}`;        // implied prints on unlocked leg
-      if (!merged[k1]) merged[k1] = {};
-      const m = merged[k1];
-      if (isFinite(qBid)) {
-        if (live.liveBid != null) {
-          const v = +(qBid - (lock - live.liveBid) * R).toFixed(4);
-          if (m.bid == null || v > m.bid) { m.bid = v; m.bidBank = q.bidBank || live.liveBidBank || ""; }
-        } else { m.yellowBid = true; m.bidDir = "bid"; if (!m.bidBank) m.bidBank = q.bidBank || ""; }
-      }
-      if (isFinite(qOff)) {
-        if (live.liveOffer != null) {
-          const v = +(qOff + (live.liveOffer - lock) * R).toFixed(4);
-          if (m.offer == null || v < m.offer) { m.offer = v; m.offerBank = q.offerBank || live.liveOfferBank || ""; }
-        } else { m.yellowOffer = true; m.offerDir = "offer"; if (!m.offerBank) m.offerBank = q.offerBank || ""; }
-      }
-    });
-    setSpreadImplied(merged);
-  }, [quotes, referred, spreadLog, activeCcy]);
+  // Spread box removed — spreadImplied kept empty so grid/panels show no spread overlays.
+  useEffect(() => { setSpreadImplied({}); }, [quotes, referred, spreadLog, activeCcy]);
   useEffect(() => { try { localStorage.setItem("vbl_sdr_type",   JSON.stringify(sdrFilterType));     } catch {} }, [sdrFilterType]);
   useEffect(() => { try { localStorage.setItem("vbl_sdr_venue",  JSON.stringify(sdrFilterPlatform)); } catch {} }, [sdrFilterPlatform]);
   useEffect(() => { try { localStorage.setItem("vbl_sdr_action", JSON.stringify(sdrFilterAction));   } catch {} }, [sdrFilterAction]);
@@ -3505,7 +3460,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0704k</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0704l</span>
       </div>
 
       {/* HEADER */}
@@ -3525,7 +3480,6 @@ export default function App() {
           </button>
           <button className={`btn${showHistPanel?" on":""}`} onClick={()=>setShowHistPanel(v=>!v)}>HIST</button>
           <button className={`btn${showOtmPanel?" on":""}`} onClick={()=>setShowOtmPanel(v=>!v)}>OTM</button>
-          <button className={`btn${showSpreadPanel?" on":""}`} onClick={()=>setShowSpreadPanel(v=>!v)}>SPRD</button>
           <button onClick={()=>setViewMode(v=>v==="vol"?"premium":"vol")}
             style={{background:viewMode==="premium"?"rgba(180,130,20,.25)":"rgba(30,50,80,.3)",border:`1px solid ${viewMode==="premium"?"rgba(200,160,40,.5)":"#253a52"}`,color:viewMode==="premium"?"#d4aa30":"#508090",padding:"3px 10px",borderRadius:3,cursor:"pointer",fontSize:9,fontFamily:"inherit",letterSpacing:".08em"}}>
             {viewMode==="vol"?"bpVOL":"bpPREM"}
@@ -3789,19 +3743,6 @@ export default function App() {
                               {_sdr.type||"SDR"} {_sdr.notional?(+_sdr.notional/1e6).toFixed(0)+"M":""}{_sdr.nettBp ? " "+_sdr.nettBp.toFixed(0)+"bp" : ""}{_sdrArr.length>1 ? " +"+(_sdrArr.length-1) : ""}
                             </div>}
 
-                            {(()=>{
-                              const spr=spreadImplied[`${exp}|${ten}`];
-                              if(!spr) return null;
-                              // No live on locked leg → spread in yellow showing direction only
-                              if(spr.bid==null&&spr.yellowBid) return (
-                                <div style={{color:"#e0c040",fontWeight:700,fontSize:9,textAlign:"center",letterSpacing:".06em"}}>
-                                  bid{spr.bidBank&&<span style={{color:bkc(spr.bidBank),fontSize:7,marginLeft:2}}>{spr.bidBank}</span>}
-                                </div>);
-                              if(spr.bid==null) return null;
-                              const ob=bids.filter(q=>!isReferred(cellKey(exp,ten),"bids",q.id)).sort((a,b)=>b.price-a.price)[0]?.price??null;
-                              if(ob!=null&&spr.bid<ob) return null; // show if tied or better
-                              return <div style={{color:"#e0c040",fontWeight:700,fontSize:11,textAlign:"center"}}>{spr.bid.toFixed(4)}{spr.bidBank&&<span style={{color:bkc(spr.bidBank),fontSize:7,marginLeft:2,fontWeight:700}}>{spr.bidBank}</span>}</div>;
-                            })()}
                             {/* BIDS — best only, full depth on hover */}
                             {(isHov ? bids : bids.slice(0,1)).map((q,i)=>{
                               const ref = isReferred(k,"bids",q.id);
@@ -3848,18 +3789,6 @@ export default function App() {
                               );
                             })}
 
-                            {(()=>{
-                              const spr2=spreadImplied[`${exp}|${ten}`];
-                              if(!spr2) return null;
-                              if(spr2.offer==null&&spr2.yellowOffer) return (
-                                <div style={{color:"#e0c040",fontWeight:700,fontSize:9,textAlign:"center",letterSpacing:".06em"}}>
-                                  offer{spr2.offerBank&&<span style={{color:bkc(spr2.offerBank),fontSize:7,marginLeft:2}}>{spr2.offerBank}</span>}
-                                </div>);
-                              if(spr2.offer==null) return null;
-                              const oo=offers.filter(q=>!isReferred(cellKey(exp,ten),"offers",q.id)).sort((a,b)=>a.price-b.price)[0]?.price??null;
-                              if(oo!=null&&spr2.offer>oo) return null; // show if tied or better
-                              return <div style={{color:"#e0c040",fontWeight:700,fontSize:11,textAlign:"center"}}>{spr2.offer.toFixed(4)}{spr2.offerBank&&<span style={{color:bkc(spr2.offerBank),fontSize:7,marginLeft:2,fontWeight:700}}>{spr2.offerBank}</span>}</div>;
-                            })()}
                             {isHov && (hasBid||hasOff) && (
                               <div style={{textAlign:"center",marginTop:1}}>
                                 <span onClick={e=>clearCell(k,e)} style={{color:"#4a2020",fontSize:7,cursor:"pointer"}}>CLEAR ALL</span>
@@ -4047,177 +3976,6 @@ export default function App() {
         {/* SPREADS PANEL */}
 
 
-        {showSpreadPanel&&<div style={{width:"22%",minWidth:230,maxWidth:310,background:"#080c14",borderLeft:"1px solid #1e3450",display:"flex",flexDirection:"column",height:"100%",overflow:"hidden"}}>
-          {/* ── HEADER ── */}
-          <div style={{padding:"5px 10px",borderBottom:"1px solid #1e3450",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <span style={{color:"#a070d0",fontSize:9,fontWeight:700,letterSpacing:".1em"}}>LEGGED SPREADS</span>
-            <div style={{display:"flex",gap:3}}>
-              <button onClick={()=>{
-                setSpreadResult(null);setSpreadName("");setSpreadQuote({bid:"",offer:"",bidBank:"",offerBank:""});
-                setSpreadLegs([{exp:"1y",ten:"1Y",lock:"",ratio:"8"},{exp:"1y",ten:"10Y",ratio:"1"}]);
-              }} style={{fontSize:7,padding:"1px 5px",borderRadius:2,cursor:"pointer",fontFamily:"inherit",border:"1px solid #1a3a1a",background:"rgba(20,60,20,.4)",color:"#40a040"}}>NEW</button>
-              <button onClick={()=>{
-                setSpreadResult(null);setSpreadImplied({});setSpreadName("");setSpreadQuote({bid:"",offer:"",bidBank:"",offerBank:""});
-                setSpreadLegs([{exp:"1y",ten:"1Y",lock:"",ratio:"8"},{exp:"1y",ten:"10Y",ratio:"1"}]);
-                setSpreadLog(prev=>prev.filter(e=>e.ccy&&e.ccy!==activeCcy));
-              }} style={{fontSize:7,padding:"1px 5px",borderRadius:2,cursor:"pointer",fontFamily:"inherit",border:"1px solid #3a1a1a",background:"rgba(60,20,20,.4)",color:"#a04040"}}>CLR</button>
-            </div>
-          </div>
-
-          <div style={{flex:1,overflow:"auto",padding:"6px 8px"}}>
-            {(()=>{
-              const iS={background:"#060a10",border:"1px solid #2a3860",color:"#b0bcc8",fontSize:8,borderRadius:2,padding:"2px 3px",fontFamily:"inherit",outline:"none"};
-              const ALL_EXP=["1w","1m","2m","3m","6m","9m","1y","18m","2y","3y","4y","5y","6y","7y","8y","9y","10y","12y","15y","20y","25y","30y"];
-              const ALL_TEN=["1Y","2Y","3Y","4Y","5Y","7Y","10Y","12Y","15Y","20Y","25Y","30Y"];
-              const upd=(i,f,v)=>setSpreadLegs(p=>p.map((l,j)=>j===i?{...l,[f]:v}:l));
-              const updQ=(f,v)=>setSpreadQuote(p=>({...p,[f]:v}));
-              const getLive=(exp,ten)=>{
-                const k=cellKey(exp.toLowerCase(),ten);
-                const cell=quotes[k];
-                if(!cell) return {liveBid:null,liveOffer:null,liveBidBank:null,liveOfferBank:null};
-                const b=(cell.bids||[]).filter(q=>!isReferred(k,"bids",q.id)).sort((a,c)=>c.price-a.price);
-                const o=(cell.offers||[]).filter(q=>!isReferred(k,"offers",q.id)).sort((a,c)=>a.price-c.price);
-                return {liveBid:b[0]?.price??null, liveOffer:o[0]?.price??null, liveBidBank:b[0]?.bank??null, liveOfferBank:o[0]?.bank??null};
-              };
-
-              const solve=()=>{
-                const L0=spreadLegs[0], L1=spreadLegs[1];
-                const lock=parseFloat(L0.lock), rA=parseFloat(L0.ratio), rB=parseFloat(L1.ratio);
-                const qBid=parseFloat(spreadQuote.bid), qOff=parseFloat(spreadQuote.offer);
-                if(!isFinite(lock)){setSpreadResult({err:"Enter a Lock on the locked leg"});return;}
-                if(!isFinite(rA)||!isFinite(rB)||rB===0){setSpreadResult({err:"Enter ratios on both legs"});return;}
-                if(!isFinite(qBid)&&!isFinite(qOff)){setSpreadResult({err:"Enter a spread bid and/or offer"});return;}
-                const R=rA/rB;
-                const live=getLive(L0.exp,L0.ten);
-                const out={bid:null,offer:null,yellowBid:false,yellowOffer:false};
-                if(isFinite(qBid)){ if(live.liveBid!=null) out.bid=+(qBid-(lock-live.liveBid)*R).toFixed(4); else out.yellowBid=true; }
-                if(isFinite(qOff)){ if(live.liveOffer!=null) out.offer=+(qOff+(live.liveOffer-lock)*R).toFixed(4); else out.yellowOffer=true; }
-                const label=spreadName||`${L0.exp}${L0.ten.toLowerCase()} v ${L1.exp}${L1.ten.toLowerCase()} ${rA}:${rB}`;
-                const entry={id:Date.now(),name:label,ccy:activeCcy,ts:new Date().toISOString(),
-                  legs:[{exp:L0.exp,ten:L0.ten,lock:L0.lock,ratio:L0.ratio},{exp:L1.exp,ten:L1.ten,ratio:L1.ratio}],
-                  quote:{bid:spreadQuote.bid,offer:spreadQuote.offer,bidBank:spreadQuote.bidBank,offerBank:spreadQuote.offerBank},
-                  live,R,out};
-                setSpreadLog(prev=>[entry,...prev.filter(h=>h.name!==label)].slice(0,20));
-                setSpreadResult(entry);
-              };
-
-              const lockedLive=getLive(spreadLegs[0]?.exp||"1y",spreadLegs[0]?.ten||"1Y");
-
-              return (<>
-                {/* Name */}
-                <input value={spreadName} onChange={e=>setSpreadName(e.target.value)}
-                  placeholder={`${spreadLegs[0]?.exp||""}${(spreadLegs[0]?.ten||"").toLowerCase()} v ${spreadLegs[1]?.exp||""}${(spreadLegs[1]?.ten||"").toLowerCase()} ${spreadLegs[0]?.ratio||"1"}:${spreadLegs[1]?.ratio||"1"}`}
-                  style={{...iS,color:"#c080f0",fontSize:8,padding:"3px 5px",width:"100%",marginBottom:5}}/>
-
-                {/* Package spread quote */}
-                <div style={{color:"#6a3090",fontSize:7,fontWeight:700,marginBottom:2,letterSpacing:".06em"}}>SPREAD QUOTE</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 30px 1fr 30px",gap:3,marginBottom:6}}>
-                  <input value={spreadQuote.bid} onChange={e=>updQ("bid",e.target.value)} onKeyDown={e=>e.key==="Enter"&&solve()}
-                    placeholder="bid" style={{...iS,color:"#00c040",fontWeight:700,textAlign:"center"}}/>
-                  <input value={spreadQuote.bidBank} onChange={e=>updQ("bidBank",e.target.value.toUpperCase())}
-                    placeholder="BK" style={{...iS,color:bkc(spreadQuote.bidBank||""),fontWeight:700,textAlign:"center"}}/>
-                  <input value={spreadQuote.offer} onChange={e=>updQ("offer",e.target.value)} onKeyDown={e=>e.key==="Enter"&&solve()}
-                    placeholder="offer" style={{...iS,color:"#ff8c00",fontWeight:700,textAlign:"center"}}/>
-                  <input value={spreadQuote.offerBank} onChange={e=>updQ("offerBank",e.target.value.toUpperCase())}
-                    placeholder="BK" style={{...iS,color:bkc(spreadQuote.offerBank||""),fontWeight:700,textAlign:"center"}}/>
-                </div>
-
-                {/* Legs header */}
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 46px 30px",gap:2,marginBottom:2}}>
-                  {["EXP","TEN","LOCK","R"].map(h=><span key={h} style={{color:"#6a3090",fontSize:7,fontWeight:700}}>{h}</span>)}
-                </div>
-
-                {/* LOCKED leg (live pulls from matrix) */}
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 46px 30px",gap:2,alignItems:"center",marginBottom:1}}>
-                  <select value={spreadLegs[0]?.exp} onChange={e=>upd(0,"exp",e.target.value)} style={{...iS}}>
-                    {ALL_EXP.map(e=><option key={e} value={e}>{e.toUpperCase()}</option>)}
-                  </select>
-                  <select value={spreadLegs[0]?.ten} onChange={e=>upd(0,"ten",e.target.value)} style={{...iS}}>
-                    {ALL_TEN.map(t=><option key={t} value={t}>{t}</option>)}
-                  </select>
-                  <input value={spreadLegs[0]?.lock||""} onChange={e=>upd(0,"lock",e.target.value)} onKeyDown={e=>e.key==="Enter"&&solve()}
-                    placeholder="lock" style={{...iS,color:"#e0c040",fontWeight:700,textAlign:"center"}}/>
-                  <input value={spreadLegs[0]?.ratio||""} onChange={e=>upd(0,"ratio",e.target.value)} onKeyDown={e=>e.key==="Enter"&&solve()}
-                    placeholder="R" style={{...iS,color:"#a070d0",fontWeight:700,textAlign:"center"}}/>
-                </div>
-                <div style={{display:"flex",alignItems:"center",gap:4,fontSize:7,marginBottom:5,paddingLeft:2}}>
-                  <span style={{color:"#5a3090"}}>LOCKED · live</span>
-                  <span style={{color:lockedLive.liveBid!=null?"#00c040":"#2a2a3a",fontWeight:700}}>{lockedLive.liveBid??"—"}</span>
-                  <span style={{color:"#2a3050"}}>/</span>
-                  <span style={{color:lockedLive.liveOffer!=null?"#ff8c00":"#2a2a3a",fontWeight:700}}>{lockedLive.liveOffer??"—"}</span>
-                  {(lockedLive.liveBid==null&&lockedLive.liveOffer==null)&&<span style={{color:"#80700a"}}>no live → yellow</span>}
-                </div>
-
-                {/* UNLOCKED leg (implied prints here) */}
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 46px 30px",gap:2,alignItems:"center",marginBottom:1}}>
-                  <select value={spreadLegs[1]?.exp} onChange={e=>upd(1,"exp",e.target.value)} style={{...iS}}>
-                    {ALL_EXP.map(e=><option key={e} value={e}>{e.toUpperCase()}</option>)}
-                  </select>
-                  <select value={spreadLegs[1]?.ten} onChange={e=>upd(1,"ten",e.target.value)} style={{...iS}}>
-                    {ALL_TEN.map(t=><option key={t} value={t}>{t}</option>)}
-                  </select>
-                  <span style={{color:"#2a2a3a",fontSize:8,textAlign:"center"}}>—</span>
-                  <input value={spreadLegs[1]?.ratio||""} onChange={e=>upd(1,"ratio",e.target.value)} onKeyDown={e=>e.key==="Enter"&&solve()}
-                    placeholder="R" style={{...iS,color:"#a070d0",fontWeight:700,textAlign:"center"}}/>
-                </div>
-                <div style={{color:"#5a3090",fontSize:7,marginBottom:6,paddingLeft:2}}>UNLOCKED · implied prints on this cell</div>
-
-                <button onClick={solve} style={{width:"100%",background:"rgba(60,10,100,.6)",border:"1px solid #7a30c0",
-                  color:"#d090f0",borderRadius:2,padding:"4px 0",fontSize:9,fontFamily:"inherit",cursor:"pointer",letterSpacing:".08em",marginBottom:5}}>SOLVE</button>
-
-                {spreadResult?.err&&<div style={{color:"#a04040",fontSize:8,textAlign:"center",marginBottom:4}}>{spreadResult.err}</div>}
-
-                {spreadResult&&!spreadResult.err&&(
-                  <div style={{background:"rgba(40,10,60,.4)",border:"1px solid #4a20a0",borderRadius:3,padding:"5px 7px",marginBottom:5}}>
-                    <div style={{color:"#8040b0",fontSize:7,fontWeight:700,marginBottom:3}}>{spreadResult.name}</div>
-                    <div style={{display:"flex",gap:8,alignItems:"baseline",marginBottom:2}}>
-                      <span style={{color:"#5a3090",fontSize:7,width:30}}>BID</span>
-                      {spreadResult.out?.bid!=null
-                        ? <span style={{color:"#00c040",fontWeight:700,fontSize:14}}>{spreadResult.out.bid}</span>
-                        : <span style={{color:"#e0c040",fontWeight:700,fontSize:11}}>{spreadResult.out?.yellowBid?"bid (no live)":"—"}</span>}
-                      {spreadResult.quote?.bidBank&&<span style={{color:bkc(spreadResult.quote.bidBank),fontSize:7,fontWeight:700}}>{spreadResult.quote.bidBank}</span>}
-                    </div>
-                    <div style={{display:"flex",gap:8,alignItems:"baseline"}}>
-                      <span style={{color:"#5a3090",fontSize:7,width:30}}>OFFER</span>
-                      {spreadResult.out?.offer!=null
-                        ? <span style={{color:"#ff8c00",fontWeight:700,fontSize:14}}>{spreadResult.out.offer}</span>
-                        : <span style={{color:"#e0c040",fontWeight:700,fontSize:11}}>{spreadResult.out?.yellowOffer?"offer (no live)":"—"}</span>}
-                      {spreadResult.quote?.offerBank&&<span style={{color:bkc(spreadResult.quote.offerBank),fontSize:7,fontWeight:700}}>{spreadResult.quote.offerBank}</span>}
-                    </div>
-                    <div style={{color:"#3a6080",fontSize:7,marginTop:3}}>
-                      live {spreadResult.live?.liveBid??"—"}/{spreadResult.live?.liveOffer??"—"} · R {spreadResult.R?.toFixed?spreadResult.R.toFixed(3):spreadResult.R}
-                    </div>
-                  </div>
-                )}
-
-                {/* History */}
-                {spreadLog.length>0&&(
-                  <div>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
-                      <span style={{color:"#5a3080",fontSize:7,fontWeight:700,letterSpacing:".06em"}}>HISTORY</span>
-                      <button onClick={()=>{setSpreadLog(prev=>prev.filter(e=>e.ccy&&e.ccy!==activeCcy));setSpreadImplied({});}} style={{...iS,color:"#4a2020",padding:"0 4px",fontSize:6}}>CLR</button>
-                    </div>
-                    {spreadLog.filter(e=>!e.ccy||e.ccy===activeCcy).slice(0,20).map((h)=>(
-                      <div key={h.id} style={{background:"rgba(20,10,40,.7)",border:"1px solid #2a1a4a",borderRadius:2,padding:"3px 6px",marginBottom:2,display:"flex",alignItems:"center",gap:4}}>
-                        <span style={{color:"#40c070",fontSize:6,flexShrink:0}}>●</span>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{color:"#60a8d0",fontSize:7,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{h.name}</div>
-                          <div style={{color:"#3a6080",fontSize:7}}>{h.out?.bid!=null?`${h.out.bid}b`:(h.out?.yellowBid?"bid?":"")}{(h.out?.bid!=null||h.out?.yellowBid)&&(h.out?.offer!=null||h.out?.yellowOffer)?" / ":""}{h.out?.offer!=null?`${h.out.offer}o`:(h.out?.yellowOffer?"offer?":"")}</div>
-                          <div style={{color:"#2a1040",fontSize:6}}>{new Date(h.ts).toLocaleTimeString("en-GB",{hour12:false})}</div>
-                        </div>
-                        <button onClick={()=>{setSpreadName(h.name);setSpreadLegs([{exp:h.legs[0].exp,ten:h.legs[0].ten,lock:h.legs[0].lock||"",ratio:h.legs[0].ratio},{exp:h.legs[1].exp,ten:h.legs[1].ten,ratio:h.legs[1].ratio}]);setSpreadQuote({bid:h.quote?.bid||"",offer:h.quote?.offer||"",bidBank:h.quote?.bidBank||"",offerBank:h.quote?.offerBank||""});setSpreadResult(h);}}
-                          style={{...iS,color:"#c080f0",borderColor:"#5a20a0",padding:"1px 5px",fontSize:7,flexShrink:0}}>↺</button>
-                        <button onClick={()=>setSpreadLog(prev=>prev.filter(x=>x.id!==h.id))}
-                          style={{...iS,color:"#a04040",borderColor:"#3a1a1a",padding:"1px 4px",fontSize:7,flexShrink:0}}>×</button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>);
-            })()}
-          </div>
-          <div style={{padding:"5px 10px",borderTop:"1px solid #1e3450",fontSize:7,color:"#1e3048",letterSpacing:".07em",flexShrink:0}}>SPREADS · INDICATIVE ONLY</div>
-        </div>}
 
 
       </div>
