@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 0704i
+// RateEdge vol-blotter 0704j
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -79,11 +79,15 @@ async function fetchLatestAudFwdRates() {
 
 // Fetch published wedge mids from blotter_mids table
 async function fetchBlotterMids(ccy = "AUD") {
-  const rows = await sbFetch("blotter_mids", {
-    select: "key,value,updated_at",
-    ccy: `eq.${ccy}`,
-  });
-  return rows || [];
+  // Paginate past PostgREST's 1000-row cap — blotter_mids holds vol_/prem_/fwd_/cfs_/wedge_
+  // for a ccy which exceeds 1000; without this, 'wedge_*' (sorts last) gets truncated.
+  const base = { select: "key,value,updated_at", ccy: `eq.${ccy}`, order: "key.asc", limit: "1000" };
+  const [p0, p1, p2] = await Promise.all([
+    sbFetch("blotter_mids", { ...base, offset: "0" }),
+    sbFetch("blotter_mids", { ...base, offset: "1000" }),
+    sbFetch("blotter_mids", { ...base, offset: "2000" }),
+  ]);
+  return [...(p0 || []), ...(p1 || []), ...(p2 || [])];
 }
 
 // Build live MID matrix from vol_history atm_vols JSON
@@ -3537,7 +3541,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0704i</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0704j</span>
       </div>
 
       {/* HEADER */}
