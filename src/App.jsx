@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 0704e
+// RateEdge vol-blotter 0704i
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -2602,7 +2602,7 @@ export default function App() {
   const [editVals, setEditVals]           = useState({ bid:"", offer:"", bidBank:"", offerBank:"" });
   const [activeBankField, setActiveBankField] = useState(null);
   const [bankSuggest, setBankSuggest]     = useState([]);
-  const [log, setLog]                     = useState(() => loadLS("vbl_log4_AUD",[]).map(l=>({...l,ts:new Date(l.ts)})));
+  const [log, setLog]                     = useState(() => loadLS("vbl_log4_USD",[]).map(l=>({...l,ts:new Date(l.ts)})));
   const [hoveredCell, setHoveredCell]     = useState(null);
   const [filterBank, setFilterBank]       = useState(null);
   const [filterExp,  setFilterExp]        = useState(null);
@@ -2661,12 +2661,12 @@ export default function App() {
   const liveMidMatrixRef = useRef({});
   const [copiedLive, setCopiedLive] = useState(false);
   const [copiedEOD,  setCopiedEOD]  = useState(false);
-  const CCYS = ['AUD','USD','EUR','JPY'];
+  const CCYS = ['USD','EUR','JPY','AUD'];
   const CCY_ISO = {AUD:'au', USD:'us', EUR:'eu', JPY:'jp'};
-  const [activeCcy, setActiveCcy] = useState('AUD');
+  const [activeCcy, setActiveCcy] = useState('USD');
   const [activeProduct, setActiveProduct] = useState('swaption');
   const [cfSubMenu,     setCfSubMenu]     = useState('atm');
-  const [activeCfCcy,   setActiveCfCcy]   = useState('AUD');
+  const [activeCfCcy,   setActiveCfCcy]   = useState('USD');
   const [copiedCfLive,  setCopiedCfLive]  = useState(false);
   const [copiedCfEOD,   setCopiedCfEOD]   = useState(false);
   const CCY_VOL_RANGE  = {AUD:[59,87],   USD:[80,110],  EUR:[59,87],  JPY:[59,87]};
@@ -3537,7 +3537,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0704e</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0704i</span>
       </div>
 
       {/* HEADER */}
@@ -3742,7 +3742,7 @@ export default function App() {
                     const hasOff   = offers.length>0;
                     const both     = hasBid&&hasOff;
                     const cross    = both && bids[0].price>=offers[0].price;
-                    const dispMid  = viewMode==="premium" ? prem?.toFixed(1) : mid?.toFixed(4);
+                    const dispMid  = viewMode==="premium" ? prem?.toFixed(4) : mid?.toFixed(4);
 
                     // Base = premium heatmap, override with quote state colour
                     let bg = heatBg(viewMode==="premium" ? prem : mid, viewMode==="premium" ? PREM_MIN : VOL_MIN, viewMode==="premium" ? PREM_MAX : VOL_MAX);
@@ -3771,7 +3771,7 @@ export default function App() {
                         {isActive ? (
                           <div className="fi" style={{display:"flex",flexDirection:"column",gap:1,padding:"3px 4px",position:"relative"}}>
                             <div style={{textAlign:"center",color:"#3a80b8",fontSize:8,marginBottom:2}}>
-                              fwd {FWD[exp]?.[ti]?.toFixed(3)??"--"}% | {viewMode==="premium"?`${prem?.toFixed(1)??"--"}bp`:`mid ${mid?.toFixed(4)??"--"}`}
+                              fwd {FWD[exp]?.[ti]?.toFixed(3)??"--"}% | {viewMode==="premium"?`${prem?.toFixed(4)??"--"}bp`:`mid ${mid?.toFixed(4)??"--"}`}
                             </div>
                             <div style={{display:"flex",alignItems:"center",gap:2}}>
                               <span style={{color:"#007a28",fontSize:9,width:8}}>B</span>
