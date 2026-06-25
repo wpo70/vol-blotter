@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 0704m
+// RateEdge vol-blotter 0704n
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -2886,21 +2886,19 @@ export default function App() {
       if (!isFinite(lock) || !isFinite(rA) || !isFinite(rB) || rB === 0) return;
       const R = rA / rB;
       const live = getLiveQ(L[0].exp, L[0].ten);
-      const k1 = `${L[1].exp.toLowerCase()}|${L[1].ten}`;
-      if (!merged[k1]) merged[k1] = {};
-      const m = merged[k1];
+      const k1 = `${L[1].exp.toLowerCase()}|${L[1].ten}`;   // implied prints on the OFFER(unlocked) leg cell
+      if (!merged[k1]) merged[k1] = { spreads: [], bid: null, offer: null, bidBank: null, offerBank: null };
+      const cell = merged[k1];
+      const s = { name: entry.name, bid: null, offer: null, bidBank: L[0].bank || "", offerBank: L[1].bank || "", yellowBid: false, yellowOffer: false };
       if (isFinite(bidQ)) {
-        if (live.liveBid != null) {
-          const v = +(bidQ - (lock - live.liveBid) * R).toFixed(4);
-          if (m.bid == null || v > m.bid) { m.bid = v; m.bidBank = L[0].bank || ""; }
-        } else { m.yellowBid = true; if (!m.bidBank) m.bidBank = L[0].bank || ""; }
+        if (live.liveBid != null) { s.bid = +(bidQ - (lock - live.liveBid) * R).toFixed(4); if (cell.bid == null || s.bid > cell.bid) { cell.bid = s.bid; cell.bidBank = s.bidBank; } }
+        else s.yellowBid = true;
       }
       if (isFinite(offQ)) {
-        if (live.liveOffer != null) {
-          const v = +(offQ + (live.liveOffer - lock) * R).toFixed(4);
-          if (m.offer == null || v < m.offer) { m.offer = v; m.offerBank = L[1].bank || ""; }
-        } else { m.yellowOffer = true; if (!m.offerBank) m.offerBank = L[1].bank || ""; }
+        if (live.liveOffer != null) { s.offer = +(offQ + (live.liveOffer - lock) * R).toFixed(4); if (cell.offer == null || s.offer < cell.offer) { cell.offer = s.offer; cell.offerBank = s.offerBank; } }
+        else s.yellowOffer = true;
       }
+      cell.spreads.push(s);   // keep every spread distinct (named), never merge into one quote
     });
     setSpreadImplied(merged);
   }, [quotes, referred, spreadLog, activeCcy]);
@@ -3503,7 +3501,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0704m</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0704n</span>
       </div>
 
       {/* HEADER */}
@@ -3789,13 +3787,21 @@ export default function App() {
 
                             {(()=>{
                               const spr=spreadImplied[`${exp}|${ten}`];
-                              if(!spr) return null;
-                              if(spr.bid==null&&spr.yellowBid) return (
-                                <div style={{color:"#e0c040",fontWeight:700,fontSize:9,textAlign:"center",letterSpacing:".06em"}}>bid{spr.bidBank&&<span style={{color:bkc(spr.bidBank),fontSize:7,marginLeft:2}}>{spr.bidBank}</span>}</div>);
-                              if(spr.bid==null) return null;
-                              const ob=bids.filter(q=>!isReferred(cellKey(exp,ten),"bids",q.id)).sort((a,b)=>b.price-a.price)[0]?.price??null;
-                              if(ob!=null&&spr.bid<ob) return null;
-                              return <div style={{color:"#e0c040",fontWeight:700,fontSize:11,textAlign:"center"}}>{spr.bid.toFixed(4)}{spr.bidBank&&<span style={{color:bkc(spr.bidBank),fontSize:7,marginLeft:2,fontWeight:700}}>{spr.bidBank}</span>}</div>;
+                              if(!spr||!spr.spreads||!spr.spreads.length) return null;
+                              return (<div style={{marginBottom:2}}>
+                                {spr.spreads.map((s,si)=>(
+                                  <div key={si} style={{textAlign:"center",lineHeight:"10px",marginBottom:2,borderBottom:si<spr.spreads.length-1?"1px solid #1a1030":"none",paddingBottom:1}}>
+                                    <div style={{color:"#a070d0",fontSize:7,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</div>
+                                    <div>
+                                      {s.bid!=null?<span style={{color:"#00c040",fontWeight:700,fontSize:10}}>{s.bid.toFixed(2)}</span>:s.yellowBid?<span style={{color:"#e0c040",fontWeight:700,fontSize:9}}>bid</span>:<span style={{color:"#2a3050"}}>—</span>}
+                                      {(s.bid!=null||s.yellowBid)&&s.bidBank&&<span style={{color:bkc(s.bidBank),fontSize:6,marginLeft:1,fontWeight:700}}>{s.bidBank}</span>}
+                                      <span style={{color:"#2a3050",margin:"0 2px"}}>/</span>
+                                      {s.offer!=null?<span style={{color:"#ff8c00",fontWeight:700,fontSize:10}}>{s.offer.toFixed(2)}</span>:s.yellowOffer?<span style={{color:"#e0c040",fontWeight:700,fontSize:9}}>offer</span>:<span style={{color:"#2a3050"}}>—</span>}
+                                      {(s.offer!=null||s.yellowOffer)&&s.offerBank&&<span style={{color:bkc(s.offerBank),fontSize:6,marginLeft:1,fontWeight:700}}>{s.offerBank}</span>}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>);
                             })()}
                             {/* BIDS — best only, full depth on hover */}
                             {(isHov ? bids : bids.slice(0,1)).map((q,i)=>{
@@ -3842,17 +3848,6 @@ export default function App() {
                                 </div>
                               );
                             })}
-
-                            {(()=>{
-                              const spr2=spreadImplied[`${exp}|${ten}`];
-                              if(!spr2) return null;
-                              if(spr2.offer==null&&spr2.yellowOffer) return (
-                                <div style={{color:"#e0c040",fontWeight:700,fontSize:9,textAlign:"center",letterSpacing:".06em"}}>offer{spr2.offerBank&&<span style={{color:bkc(spr2.offerBank),fontSize:7,marginLeft:2}}>{spr2.offerBank}</span>}</div>);
-                              if(spr2.offer==null) return null;
-                              const oo=offers.filter(q=>!isReferred(cellKey(exp,ten),"offers",q.id)).sort((a,b)=>a.price-b.price)[0]?.price??null;
-                              if(oo!=null&&spr2.offer>oo) return null;
-                              return <div style={{color:"#e0c040",fontWeight:700,fontSize:11,textAlign:"center"}}>{spr2.offer.toFixed(4)}{spr2.offerBank&&<span style={{color:bkc(spr2.offerBank),fontSize:7,marginLeft:2,fontWeight:700}}>{spr2.offerBank}</span>}</div>;
-                            })()}
 
                             {isHov && (hasBid||hasOff) && (
                               <div style={{textAlign:"center",marginTop:1}}>
