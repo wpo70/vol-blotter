@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 0704p
+// RateEdge vol-blotter 0704q
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -329,6 +329,32 @@ const fmtNum = (n, max=4) => {
   if (s.indexOf(".")>=0) s = s.replace(/0+$/,"").replace(/\.$/,"");
   return s;
 };
+// === SDR platform / SEF map — mirrors the pricer (DEPLOY_v2506g _EU_BROKER_NAMES) ===
+const PLATFORM_NAMES = {
+  "BGCD":"BGC","BGCO":"BGC","BGCI":"BGC","AURO":"Aurel BGC",
+  "TPSE":"Tullett Prebon","TPIR":"Tullett Prebon","TPEU":"Tullett Prebon",
+  "IGDL":"ICAP","ISWE":"ICAP (E)","ISWV":"ICAP (V)","IOTF":"ICAP",
+  "IOIR":"ICAP UK OTF","IMRD":"TP ICAP UK MTF",
+  "TWSF":"Tradition","TWEM":"Tradition","TSEF":"Tradition","TSIR":"Tradition",
+  "TSAF":"Tradition","TCDS":"Tradition","TREU":"Tradition","TEUR":"Tradition","TEIR":"Tradition",
+  "GSEF":"GFI","GFSO":"GFI",
+  "BBSF":"Bloomberg","BMTF":"Bloomberg","BTFE":"Bloomberg","BLOM":"Bloomberg",
+  "HSBC":"HSBC",
+  "BILT":"Bilateral","XXXX":"Bilateral","XOFF":"Off-venue",
+  "RTSX":"RTX","RTXS":"RTX","TRWB":"Tradeweb","DWSF":"Dealerweb","ICSE":"ICE",
+};
+// Selector MIC universe + which are NOT pre-selected (mirrors pricer _BROKER_MICS / _NOT_DEFAULT)
+const BROKER_MICS = ["BGCD","BGCO","BGCI","AURO","BILT","DWSF","GSEF","GFSO",
+  "IGDL","ISWE","ISWV","IOIR","IMRD",
+  "TPSE","TPIR","TPEU","TSEF","TSIR","TSAF","TWSF","TWEM",
+  "BBSF","BMTF","BTFE","XOFF","XXXX"];
+const NOT_DEFAULT = new Set(["BILT","XXXX","BBSF","BMTF","BTFE","XOFF"]);
+const venueName = (mic) => PLATFORM_NAMES[mic] || mic || "";
+// Group MICs by display name, in selector order
+const VENUE_GROUPS = (()=>{ const order=[]; BROKER_MICS.forEach(m=>{const nm=venueName(m); if(!order.includes(nm)) order.push(nm);}); 
+  return order.sort().map(nm=>({ name:nm, mics: BROKER_MICS.filter(m=>venueName(m)===nm) })); })();
+// Default-on = any group containing at least one non-NOT_DEFAULT MIC (so Bilateral/Bloomberg/Off-venue start OFF)
+const DEFAULT_VENUE_NAMES = VENUE_GROUPS.filter(g=>g.mics.some(m=>!NOT_DEFAULT.has(m))).map(g=>g.name);
 const loadLS  = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
 
 
@@ -2562,7 +2588,7 @@ function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatfor
           ...newt.filter(r => !["CALL","PUT"].includes(r.option_type_decoded)),
         ]
           .filter(r=>typF.length===0||typF.includes(typeLabel(r.option_type_decoded)))
-          .filter(r=>venF.length===0||venF.includes(r.platform_identifier));
+          .filter(r=>venF.length===0||venF.includes(venueName(r.platform_identifier)));
 
         allTrades.forEach(r => {
           const expKey = sdrExpToKey(r.opt_tenor);
@@ -2628,7 +2654,7 @@ export default function App() {
   const sdrManualPollRef = React.useRef(null);
   const [sdrCfCount, setSdrCfCount] = useState({caps:0,floors:0,total:0});
   const [sdrFilterType,     setSdrFilterType]     = useState(()=>loadLS("vbl_sdr_type",[]));
-  const [sdrFilterPlatform, setSdrFilterPlatform] = useState(()=>loadLS("vbl_sdr_venue",[]));
+  const [sdrFilterPlatform, setSdrFilterPlatform] = useState(()=>loadLS("vbl_sdr_venue2",DEFAULT_VENUE_NAMES));
   const [sdrFilterAction,   setSdrFilterAction]   = useState([]);
   const [spreadName,   setSpreadName]   = useState("");
   // Sheet model: leg[0] = BID leg (Lock + Ratio + Bid + Bk; live pulls from matrix),
@@ -2862,7 +2888,7 @@ export default function App() {
   const [ccyStore, setCcyStore] = useState({AUD:{quotes:{},log:[],referred:new Set()},USD:{quotes:{},log:[],referred:new Set()},EUR:{quotes:{},log:[],referred:new Set()},JPY:{quotes:{},log:[],referred:new Set()}});
 
   useEffect(() => { try { localStorage.setItem(`vbl_log4_${activeCcy}`, JSON.stringify(log.slice(0,300))); } catch {} }, [log]);
-  // quotes are session-only - not persisted to localStorage
+  useEffect(() => { try { localStorage.setItem(`vbl_quotes_${activeCcy}`, JSON.stringify(quotes)); } catch {} }, [quotes]);
   useEffect(() => { try { localStorage.setItem("vbl_otm2", JSON.stringify(otmQuotes.slice(0,200))); } catch {} }, [otmQuotes]);
   useEffect(() => { try { localStorage.setItem("vbl_spread_log", JSON.stringify(spreadLog.slice(0,100))); } catch {} }, [spreadLog]);
 
@@ -2913,7 +2939,9 @@ export default function App() {
     setSpreadImplied(merged);
   }, [quotes, referred, spreadLog, activeCcy]);
   useEffect(() => { try { localStorage.setItem("vbl_sdr_type",   JSON.stringify(sdrFilterType));     } catch {} }, [sdrFilterType]);
-  useEffect(() => { try { localStorage.setItem("vbl_sdr_venue",  JSON.stringify(sdrFilterPlatform)); } catch {} }, [sdrFilterPlatform]);
+  useEffect(() => { try { localStorage.setItem("vbl_sdr_venue2", JSON.stringify(sdrFilterPlatform)); } catch {} }, [sdrFilterPlatform]);
+  const sdrVenueRef = useRef(DEFAULT_VENUE_NAMES);
+  useEffect(()=>{ sdrVenueRef.current = Array.isArray(sdrFilterPlatform)?sdrFilterPlatform:[]; },[sdrFilterPlatform]);
   useEffect(() => { try { localStorage.setItem("vbl_sdr_action", JSON.stringify(sdrFilterAction));   } catch {} }, [sdrFilterAction]);
 
   // SDR hover tooltip via direct DOM (bypasses React portals/CSS clipping)
@@ -3069,12 +3097,14 @@ export default function App() {
           return;
         }
         const minNot=(sdrAlertMinRef.current||0)*1e6;
+        const venSel=sdrVenueRef.current||[];
         for(const r of [...rows].reverse()){            // oldest->newest so toasts stack in order
           const key=_sdrKeyOf(r);
           if(seenSdrKeys.current.has(key)) continue;     // already shown/dismissed this session
           seenSdrKeys.current.add(key);
           const ts=Date.parse(r.event_timestamp);
           if(isFinite(ts) && ts < sdrSessionMs.current) continue;   // ignore anything older than this session
+          if(venSel.length && !venSel.includes(PLATFORM_NAMES[r.platform_identifier]||r.platform_identifier)) continue;  // honour venue filter
           if((Number(r.notional_leg1)||0) < minNot) continue;
           addToast(_fmtAlert(r), "sdr", true);           // sticky — manual dismiss only
         }
@@ -3199,7 +3229,7 @@ export default function App() {
     // load new ccy state - from memory first, then localStorage
     const stored = ccyStore[ccy];
     const savedLog = loadLS(`vbl_log4_${ccy}`,[]).map(l=>({...l,ts:new Date(l.ts)}));
-    const savedQuotes = {};  // quotes are session-only
+    const savedQuotes = (stored && stored.quotes) ? stored.quotes : loadLS(`vbl_quotes_${ccy}`, {});
     setQuotes(savedQuotes);
     setLog(savedLog);
     setReferred(stored?.referred || new Set());
@@ -3523,7 +3553,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0704p</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0704q</span>
       </div>
 
       {/* HEADER */}
@@ -3625,11 +3655,7 @@ export default function App() {
       {/* LIVE POSITION BAR */}
       {/* SDR FILTER BAR */}
       {(()=>{
-        const PLATFORM_NAMES={"BGCD":"BGC","TWSF":"Tradition","TSEF":"Tradition","TPSE":"Tullett Prebon",
-          "IGDL":"ICAP","ISWE":"ICAP (E)","ISWV":"ICAP (V)","GSEF":"GFI",
-          "DWSF":"Dealerweb","ICSE":"ICE","BILT":"Bilateral","XXXX":"Bilateral"};
         const TYPE_LABELS={"CALL":"Payer","PUT":"Receiver","STR":"Straddle","STRG":"Strangle","EC":"Euro Swn","BCALL":"Berm Payer","NSTD":"Non-std","XCS":"XCCY Swn","OTH":"Other"};
-        const VENUES=[...new Map(Object.entries(PLATFORM_NAMES).map(([k,v])=>[v,k])).entries()].map(([v,k])=>({k,v}));
         const ACTIONS=["NEWT","MODI","CORR","CANC"];
         const actArr=Array.isArray(sdrFilterAction)?sdrFilterAction:[];
         const typArr=Array.isArray(sdrFilterType)?sdrFilterType:[];
@@ -3649,7 +3675,7 @@ export default function App() {
             <span style={{color:"#3a6080",fontSize:7,marginLeft:3}}>TYPE:</span>
             {Object.entries(TYPE_LABELS).map(([k,v])=><button key={k} onClick={()=>togTyp(k)} style={tS(typArr.includes(k)||typArr.length===0)}>{v}</button>)}
             <span style={{color:"#3a6080",fontSize:7,marginLeft:3}}>VENUE:</span>
-            {VENUES.map(({k,v})=><button key={k} onClick={()=>togVen(k)} style={tS(venArr.includes(k)||venArr.length===0)}>{v}</button>)}
+            {VENUE_GROUPS.map(({name})=><button key={name} onClick={()=>togVen(name)} style={tS(venArr.includes(name))}>{name}</button>)}
             <span style={{color:"#5a3010",fontSize:7,marginLeft:4}}>{Object.keys(sdrFlash).length} cells</span>
             <button onClick={()=>{ if(sdrManualPollRef.current) sdrManualPollRef.current(); }}
               style={{fontSize:7,padding:"1px 6px",borderRadius:2,cursor:"pointer",fontFamily:"inherit",
