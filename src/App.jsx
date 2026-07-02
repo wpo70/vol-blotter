@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 0704v
+// RateEdge vol-blotter 0207a
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -3196,7 +3196,8 @@ export default function App() {
   useEffect(()=>{ sdrAlertMinRef.current = sdrAlertMinM; },[sdrAlertMinM]);
   const seenSdrKeys   = useRef(new Set());   // persistent across ccy switches — NEVER cleared
   const sdrCcySeeded  = useRef({});          // per-ccy: has the current window been seeded (no-fire)
-  const sdrSessionMs  = useRef(Date.now());  // only alert trades that arrive after the blotter opened
+  const sdrSessionMs  = useRef(Date.now());  // (legacy) session open time
+  const sdrHiWater    = useRef({});          // per-ccy: newest event_timestamp present when blotter opened — only fire prints strictly newer (fail closed)
   const _sdrKeyOf = (r)=> (r.dissemination_id!=null && String(r.dissemination_id))
         || `${r.notional_ccy}|${r.opt_tenor}|${r.swp_tenor}|${r.notional_leg1}|${r.premium_amount}|${r.strike_pct}|${r.event_timestamp}`;
   useEffect(()=>{
@@ -3221,9 +3222,12 @@ export default function App() {
           limit:"60",
         });
         if(stop||!rows) return;
-        // First poll for this ccy: seed the current window into the persistent set, fire nothing.
+        // First poll for this ccy: seed the current window into the persistent set + record the
+        // newest timestamp present. Fire nothing.
         if(!sdrCcySeeded.current[ccy]){
-          rows.forEach(r=>seenSdrKeys.current.add(_sdrKeyOf(r)));
+          let hw="";
+          rows.forEach(r=>{ seenSdrKeys.current.add(_sdrKeyOf(r)); const et=r.event_timestamp||""; if(et>hw) hw=et; });
+          sdrHiWater.current[ccy]=hw;
           sdrCcySeeded.current[ccy]=true;
           return;
         }
@@ -3233,8 +3237,8 @@ export default function App() {
           const key=_sdrKeyOf(r);
           if(seenSdrKeys.current.has(key)) continue;     // already shown/dismissed this session
           seenSdrKeys.current.add(key);
-          const ts=Date.parse(r.event_timestamp);
-          if(isFinite(ts) && ts < sdrSessionMs.current) continue;   // ignore anything older than this session
+          const et=r.event_timestamp||"";
+          if(!et || et <= (sdrHiWater.current[ccy]||"\uffff")) continue;   // only prints newer than blotter-open (fail closed on missing ts)
           if(venSel.length && !venSel.includes(PLATFORM_NAMES[r.platform_identifier]||r.platform_identifier)) continue;  // honour venue filter
           if((Number(r.notional_leg1)||0) < minNot) continue;
           addToast(_fmtAlert(r), "sdr", true);           // sticky — manual dismiss only
@@ -3689,7 +3693,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0704v</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0207a</span>
       </div>
 
       {/* HEADER */}
