@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 0207a
+// RateEdge vol-blotter 0207c
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -2632,12 +2632,12 @@ function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatfor
 }
 
 
-// ── SDR TAPE: all SDR trades for the session (USD + EUR), times in local tz ──
+// ── SDR TAPE: all SDR trades for the session (USD + EUR + GBP), times in local tz ──
 function SdrTapePanel() {
   const [allRows, setAllRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr]         = useState(null);
-  const [ccyF, setCcyF]       = useState("BOTH");   // USD | EUR | BOTH
+  const [ccyF, setCcyF]       = useState("BOTH");   // USD | EUR | GBP | BOTH
   const [sessIdx, setSessIdx] = useState(0);        // 0 = latest session, 1 = previous
   const [typeF, setTypeF]     = useState("ALL");
   const TZ = "Australia/Brisbane";
@@ -2664,8 +2664,8 @@ function SdrTapePanel() {
         }
         return out;
       };
-      const [usd, eur] = await Promise.all([pull("USD"), pull("EUR")]);
-      setAllRows([...usd, ...eur]);
+      const [usd, eur, gbp] = await Promise.all([pull("USD"), pull("EUR"), pull("GBP")]);
+      setAllRows([...usd, ...eur, ...gbp]);
     } catch(e) { setErr(String((e&&e.message)||e)); }
     setLoading(false);
   }, []);
@@ -2705,7 +2705,7 @@ function SdrTapePanel() {
   const fmtDate = (d)=>{ if(!d) return "—"; try { return new Intl.DateTimeFormat("en-GB",{timeZone:TZ,weekday:"short",day:"2-digit",month:"short"}).format(new Date(d+"T12:00:00Z")); } catch { return d; } };
   const fmtN = (n)=> (n==null||n==="") ? "—" : (Math.abs(+n)>=1e9 ? `${(+n/1e9).toFixed(2)}B` : Math.abs(+n)>=1e6 ? `${(+n/1e6).toFixed(0)}M` : `${Math.round(+n)}`);
   const tCol = (t)=>({Payer:"#00c040",Receiver:"#ff8c00",Straddle:"#c080f0",Strangle:"#e0a040",Cap:"#40b0e0",Floor:"#e07040"}[t]||"#90a8c0");
-  const cCol = (c)=>({USD:"#5a9fd4",EUR:"#d4af5a"}[c]||"#90a8c0");
+  const cCol = (c)=>({USD:"#5a9fd4",EUR:"#d4af5a",GBP:"#5ecb8a"}[c]||"#90a8c0");
 
   const chip = (on)=>({fontSize:8,padding:"2px 7px",borderRadius:3,cursor:"pointer",fontFamily:"inherit",fontWeight:700,letterSpacing:".05em",
     border:`1px solid ${on?"rgba(60,130,230,.5)":"#1e3450"}`, background:on?"rgba(30,80,180,.45)":"rgba(15,35,70,.4)", color:on?"#90c8f0":"#406080"});
@@ -2722,7 +2722,7 @@ function SdrTapePanel() {
         <button onClick={()=>setSessIdx(0)} style={chip(sessIdx===0)}>THIS · {fmtDate(sessions[0])}</button>
         <button onClick={()=>setSessIdx(1)} style={chip(sessIdx===1)} disabled={!sessions[1]}>PREV · {fmtDate(sessions[1])}</button>
         <span style={{color:"#2a4060"}}>·</span>
-        {["BOTH","USD","EUR"].map(c=><button key={c} onClick={()=>setCcyF(c)} style={chip(ccyF===c)}>{c}</button>)}
+        {["BOTH","USD","EUR","GBP"].map(c=><button key={c} onClick={()=>setCcyF(c)} style={chip(ccyF===c)}>{c}</button>)}
         <span style={{color:"#2a4060"}}>·</span>
         {TYPES.map(t=><button key={t} onClick={()=>setTypeF(t)} style={{...chip(typeF===t),color:typeF===t?"#90c8f0":(t==="ALL"?"#406080":tCol(t)),fontSize:7,padding:"2px 5px"}}>{t}</button>)}
         <span style={{marginLeft:"auto",color:"#3a6080",fontSize:8}}>{loading?"loading…":`${rows.length} trades`}</span>
@@ -3693,7 +3693,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0207a</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0207c</span>
       </div>
 
       {/* HEADER */}
