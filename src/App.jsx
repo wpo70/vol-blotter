@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 0307a
+// RateEdge vol-blotter 0307b
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -3225,23 +3225,30 @@ export default function App() {
         // First poll for this ccy: seed the current window into the persistent set + record the
         // newest timestamp present. Fire nothing.
         if(!sdrCcySeeded.current[ccy]){
+          if(!rows.length) return;                       // empty window: DON'T mark seeded — retry next poll (fail closed)
           let hw="";
           rows.forEach(r=>{ seenSdrKeys.current.add(_sdrKeyOf(r)); const et=r.event_timestamp||""; if(et>hw) hw=et; });
+          if(!hw) hw=new Date().toISOString();           // no usable timestamps: wall-clock, never ""
           sdrHiWater.current[ccy]=hw;
           sdrCcySeeded.current[ccy]=true;
           return;
         }
         const minNot=(sdrAlertMinRef.current||0)*1e6;
         const venSel=sdrVenueRef.current||[];
+        const _hw=sdrHiWater.current[ccy];
+        if(!_hw) return;                                 // no valid seed yet — fail closed, no toasts
+        let _fired=0;
         for(const r of [...rows].reverse()){            // oldest->newest so toasts stack in order
           const key=_sdrKeyOf(r);
           if(seenSdrKeys.current.has(key)) continue;     // already shown/dismissed this session
           seenSdrKeys.current.add(key);
           const et=r.event_timestamp||"";
-          if(!et || et <= (sdrHiWater.current[ccy]||"\uffff")) continue;   // only prints newer than blotter-open (fail closed on missing ts)
+          if(!et || et <= _hw) continue;                 // only prints strictly newer than blotter-open (fail closed on missing ts)
           if(venSel.length && !venSel.includes(PLATFORM_NAMES[r.platform_identifier]||r.platform_identifier)) continue;  // honour venue filter
           if((Number(r.notional_leg1)||0) < minNot) continue;
+          if(_fired>=10) break;                          // cap per tick — never a wall of toasts
           addToast(_fmtAlert(r), "sdr", true);           // sticky — manual dismiss only
+          _fired++;
         }
       }catch(e){ console.warn("[SDR alert]",e); }
     };
@@ -3693,7 +3700,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0307a</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0307b</span>
       </div>
 
       {/* HEADER */}
