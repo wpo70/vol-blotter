@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 0307b
+// RateEdge vol-blotter 0307d
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -38,7 +38,7 @@ async function fetchLatestVols(ccy) {
 // Fetch forward swap rates from swap_rates (3M BBSW, latest date)
 async function fetchLatestFwdRates(ccy) {
   // Generic version for USD/EUR - uses SOFR for USD, EURIBOR for EUR
-  const floatMap = {AUD:"3M BBSW", USD:"SOFR", EUR:"6M EURIBOR", NZD:"3M BKBM"};
+  const floatMap = {AUD:"3M BBSW", USD:"SOFR", EUR:"EURIBOR 6M", GBP:"SONIA", NZD:"3M BKBM"};
   const floatRate = floatMap[ccy] || "SOFR";
   const dates = await sbFetch("swap_rates", {
     select: "date",
@@ -2826,16 +2826,16 @@ export default function App() {
   const liveMidMatrixRef = useRef({});
   const [copiedLive, setCopiedLive] = useState(false);
   const [copiedEOD,  setCopiedEOD]  = useState(false);
-  const CCYS = ['USD','EUR','JPY','AUD'];
-  const CCY_ISO = {AUD:'au', USD:'us', EUR:'eu', JPY:'jp'};
+  const CCYS = ['USD','EUR','GBP','JPY','AUD'];
+  const CCY_ISO = {AUD:'au', USD:'us', EUR:'eu', GBP:'gb', JPY:'jp'};
   const [activeCcy, setActiveCcy] = useState('USD');
   const [activeProduct, setActiveProduct] = useState('swaption');
   const [cfSubMenu,     setCfSubMenu]     = useState('atm');
   const [activeCfCcy,   setActiveCfCcy]   = useState('USD');
   const [copiedCfLive,  setCopiedCfLive]  = useState(false);
   const [copiedCfEOD,   setCopiedCfEOD]   = useState(false);
-  const CCY_VOL_RANGE  = {AUD:[59,87],   USD:[80,110],  EUR:[59,87],  JPY:[59,87]};
-  const CCY_PREM_RANGE = {AUD:[6,1700],  USD:[10,3400], EUR:[6,1700], JPY:[6,1700]};
+  const CCY_VOL_RANGE  = {AUD:[59,87],   USD:[80,110],  EUR:[59,87],  GBP:[59,87],  JPY:[59,87]};
+  const CCY_PREM_RANGE = {AUD:[6,1700],  USD:[10,3400], EUR:[6,1700], GBP:[6,1700], JPY:[6,1700]};
 
   // ── Live mids from Supabase ──────────────────────────────────────────────
   const [liveMidMatrix, setLiveMidMatrix] = useState(null);   // vol bp matrix {exp: [t0..tn]}
@@ -2944,9 +2944,9 @@ export default function App() {
     setMidsLoading(false);
   }, [quotes, referred]);
 
-  const CCY_FWD   = {AUD:AUD_FWD,  USD:USD_FWD,  EUR:AUD_FWD,  JPY:AUD_FWD};
-  const CCY_MID   = {AUD:AUD_MID,  USD:USD_MID,  EUR:AUD_MID,  JPY:AUD_MID};
-  const CCY_PREM  = {AUD:AUD_PREM, USD:USD_PREM, EUR:AUD_PREM, JPY:AUD_PREM};
+  const CCY_FWD   = {AUD:AUD_FWD,  USD:USD_FWD,  EUR:AUD_FWD,  GBP:AUD_FWD,  JPY:AUD_FWD};
+  const CCY_MID   = {AUD:AUD_MID,  USD:USD_MID,  EUR:AUD_MID,  GBP:AUD_MID,  JPY:AUD_MID};
+  const CCY_PREM  = {AUD:AUD_PREM, USD:USD_PREM, EUR:AUD_PREM, GBP:AUD_PREM, JPY:AUD_PREM};
   // Use live data if loaded, else fall back to hardcoded
   // Build live FWD matrix: each expiry row = spot swap rates by tenor
   const liveFwdMatrix = React.useMemo(() => {
@@ -2965,7 +2965,11 @@ export default function App() {
     ALL_EXPIRIES.forEach(exp => { m[exp] = row; });
     return m;
   }, [liveFwdMap, liveWedgeMids]);
-  const FWD      = (activeCcy === "AUD" && liveFwdMatrix) ? liveFwdMatrix : (CCY_FWD[activeCcy] || AUD_FWD);
+  // Use live forwards for ANY ccy when the pricer has published fwd_ mids (AUD also keeps
+  // its spot-replication fallback). Hardcoded CCY_FWD snapshots are last resort only —
+  // they are months stale and were showing for USD while vols/prems updated live.
+  const _hasPricerFwds = liveWedgeMids && Object.keys(liveWedgeMids).some(k => k.startsWith("fwd_"));
+  const FWD      = (liveFwdMatrix && (activeCcy === "AUD" || _hasPricerFwds)) ? liveFwdMatrix : (CCY_FWD[activeCcy] || AUD_FWD);
   const MID      = liveMidMatrix ? liveMidMatrix : (CCY_MID[activeCcy] || AUD_MID);
   if (liveMidMatrix) console.log('[MID debug] liveMidMatrix 1w,1Y=', liveMidMatrix['1w']?.[0], 'AUD_MID 1w,1Y=', AUD_MID['1w']?.[0], 'using live=', MID===liveMidMatrix);
   // Live premium matrix: use pricer-published atm_prems if available,
@@ -3700,7 +3704,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0307b</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0307d</span>
       </div>
 
       {/* HEADER */}
