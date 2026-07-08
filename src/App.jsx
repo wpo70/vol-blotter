@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 0907b
+// RateEdge vol-blotter 0907c
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -2669,7 +2669,7 @@ function SdrTapePanel({ mainCcy }) {
   }, [mainCcy]);
   const [sessIdx, setSessIdx] = useState(0);        // 0 = latest session, 1 = previous
   const [typeF, setTypeF]     = useState("ALL");
-  const [venF, setVenF]       = useState("ALL");
+  const [venF, setVenF]       = useState([]);   // [] = ALL; else list of selected venues (toggle)
   const TZ = "Australia/Brisbane";
 
   const fetchTape = useCallback(async () => {
@@ -2752,7 +2752,7 @@ function SdrTapePanel({ mainCcy }) {
     });
     out.sort((a,b)=> new Date(b.event_timestamp) - new Date(a.event_timestamp));
     let out2 = typeF==="ALL" ? out : out.filter(r => r._type===typeF);
-    if (venF!=="ALL") out2 = out2.filter(r => venueName(r.platform_identifier)===venF);
+    if (venF.length) out2 = out2.filter(r => venF.includes(venueName(r.platform_identifier)));
     return out2;
   }, [allRows, sessionDate, ccyF, typeF, venF]);
   const venues = useMemo(() => ["ALL", ...[...new Set(allRows.filter(r=>r.trade_date===sessionDate).map(r=>venueName(r.platform_identifier)))].sort()], [allRows, sessionDate]);
@@ -2782,7 +2782,11 @@ function SdrTapePanel({ mainCcy }) {
         <span style={{color:"#2a4060"}}>·</span>
         {TYPES.map(t=><button key={t} onClick={()=>setTypeF(t)} style={{...chip(typeF===t),color:typeF===t?"#90c8f0":(t==="ALL"?"#406080":tCol(t)),fontSize:7,padding:"2px 5px"}}>{t}</button>)}
         <span style={{color:"#2a4060"}}>·</span>
-        {venues.map(v=><button key={v} onClick={()=>setVenF(v)} style={{...chip(venF===v),fontSize:7,padding:"2px 5px"}}>{v}</button>)}
+        {venues.map(v=>{
+          const on = v==="ALL" ? venF.length===0 : venF.includes(v);
+          const click = () => v==="ALL" ? setVenF([]) : setVenF(p => p.includes(v) ? p.filter(x=>x!==v) : [...p, v]);
+          return <button key={v} onClick={click} style={{...chip(on),fontSize:7,padding:"2px 5px"}}>{v}</button>;
+        })}
         <span style={{marginLeft:"auto",color:"#3a6080",fontSize:8}}>{loading?"loading…":`${rows.length} trades`}</span>
         <button onClick={fetchTape} style={{...chip(false),fontSize:8}}>↻</button>
       </div>
@@ -3777,7 +3781,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0907b</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0907c</span>
       </div>
 
       {/* HEADER */}
