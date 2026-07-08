@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 0307d
+// RateEdge vol-blotter 0307e
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -2852,7 +2852,7 @@ export default function App() {
     _autoLoaded.current = true;
     // Restore from localStorage cache first (instant display)
     try {
-      const cached = localStorage.getItem('vbl_liveMids');
+      const cached = localStorage.getItem('vbl_liveMids_'+(activeCcy||'USD'));
       if (cached) {
         const { midMatrix, premData, fwdMap, strikeMap, wedgeMids, ts } = JSON.parse(cached);
         if (midMatrix) setLiveMidMatrix(midMatrix);
@@ -2869,14 +2869,14 @@ export default function App() {
   const [midsLoading,   setMidsLoading]   = useState(false);
   const [flashCells,    setFlashCells]    = useState(new Set()); // "exp|ten" keys flashing red
 
-  const loadFreshMids = useCallback(async () => {
+  const loadFreshMids = useCallback(async (ccyOverride) => {
     if (!SUPABASE_URL || !SUPABASE_ANON) {
       alert("Supabase not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your .env file.");
       return;
     }
     setMidsLoading(true);
     try {
-      const _ccy = activeCcy || "AUD";
+      const _ccy = ccyOverride || activeCcy || "AUD";
       const [volSnap, fwdRows, wedgeRows] = await Promise.all([
         fetchLatestVols(_ccy),
         _ccy === "AUD" ? fetchLatestAudFwdRates() : fetchLatestFwdRates(_ccy),
@@ -2931,7 +2931,7 @@ export default function App() {
       setMidsLoaded(_ts);
       // Cache to localStorage for persistence across refresh/login
       try {
-        localStorage.setItem('vbl_liveMids', JSON.stringify({
+        localStorage.setItem('vbl_liveMids_'+_ccy, JSON.stringify({
           midMatrix: newMidMatrix, premData: newPremData,
           fwdMap: newFwdMap, strikeMap: newStrikeMap,
           wedgeMids: newWedgeMids, ts: _ts
@@ -2942,7 +2942,7 @@ export default function App() {
       alert("Failed to load mids from Supabase: " + e.message);
     }
     setMidsLoading(false);
-  }, [quotes, referred]);
+  }, [quotes, referred, activeCcy]);
 
   const CCY_FWD   = {AUD:AUD_FWD,  USD:USD_FWD,  EUR:AUD_FWD,  GBP:AUD_FWD,  JPY:AUD_FWD};
   const CCY_MID   = {AUD:AUD_MID,  USD:USD_MID,  EUR:AUD_MID,  GBP:AUD_MID,  JPY:AUD_MID};
@@ -3276,7 +3276,11 @@ export default function App() {
       // Reload log for this currency
       const saved = loadLS(`vbl_log4_${activeCcy}`,[]).map(l=>({...l,ts:new Date(l.ts)}));
       setLog(saved);
-      if (SUPABASE_URL && SUPABASE_ANON) loadFreshMids();
+      // Clear the previous ccy's live matrices so they can never display under the new ccy,
+      // then fetch explicitly for the NEW ccy (no stale closure).
+      setLiveMidMatrix(null); setLivePremData(null); setLiveFwdMap(null);
+      setLiveStrikeMap(null); setLiveWedgeMids({});
+      if (SUPABASE_URL && SUPABASE_ANON) loadFreshMids(activeCcy);
     }
   }, [activeCcy]);
   useEffect(() => { if (activeCell && bidRef.current) bidRef.current.focus(); }, [activeCell]);
@@ -3704,7 +3708,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0307d</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0307e</span>
       </div>
 
       {/* HEADER */}
