@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 0307g
+// RateEdge vol-blotter 0907a
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -2657,11 +2657,16 @@ function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatfor
 
 
 // ── SDR TAPE: all SDR trades for the session (USD + EUR + GBP), times in local tz ──
-function SdrTapePanel() {
+function SdrTapePanel({ mainCcy }) {
   const [allRows, setAllRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr]         = useState(null);
   const [ccyF, setCcyF]       = useState("BOTH");   // USD | EUR | GBP | BOTH
+  // Follow the main blotter currency: switching the sidebar chip switches the tape
+  // filter automatically (user can still click BOTH/another ccy manually afterwards).
+  React.useEffect(() => {
+    if (mainCcy && ["USD","EUR","GBP"].includes(mainCcy)) setCcyF(mainCcy);
+  }, [mainCcy]);
   const [sessIdx, setSessIdx] = useState(0);        // 0 = latest session, 1 = previous
   const [typeF, setTypeF]     = useState("ALL");
   const TZ = "Australia/Brisbane";
@@ -3743,7 +3748,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0307g</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0907a</span>
       </div>
 
       {/* HEADER */}
@@ -3912,7 +3917,7 @@ export default function App() {
       <div style={{display:activeProduct==="capfloor"?"flex":"none",flex:1,overflow:"hidden",flexDirection:"column",minHeight:0}}>
         <CapFloorPanel spreadImplied={spreadImplied} ccy={activeCfCcy} subMenu={cfSubMenu} hiddenSt={cfHiddenSt} setHiddenSt={setCfHiddenSt} cfLiveRef={cfLiveRef} cfEodRef={cfEodRef} swpQuotes={quotes} swpReferred={referred} liveStrikeMap={activeCfCcy==="AUD"?liveStrikeMap:null} liveWedgeMids={activeCfCcy==="AUD"?liveWedgeMids:null} livePremMatrix={activeCfCcy==="AUD"?livePremMatrix:null} copiedCfLive={copiedCfLive} setCopiedCfLive={setCopiedCfLive} copiedCfEOD={copiedCfEOD} setCopiedCfEOD={setCopiedCfEOD}/>
       </div>
-      {activeProduct==="sdrtape" && <SdrTapePanel/>}
+      {activeProduct==="sdrtape" && <SdrTapePanel mainCcy={activeCcy}/>}
 
       <div style={{display:activeProduct==="swaption"?"flex":"none",flex:1,overflow:"hidden"}}>
         {/* GRID */}
