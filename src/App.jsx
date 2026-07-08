@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 0307e
+// RateEdge vol-blotter 0307g
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -2581,11 +2581,35 @@ function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatfor
 
         // Build flash map — NEWT only, classified (following pricer Full Trade Analytics)
         const pairedPayerIds = new Set(straddles.map(s=>s.dissemination_id));
+        // Tradition (TSEF family) reports a straddle as TWO 'STR' leg prints — same ts/
+        // strike/tenor/notional, each at HALF premium. Merge pairs so cells show ONE
+        // straddle at the summed (full) premium — same logic as the pricer tape.
+        // All other venues' STR prints untouched.
+        const TRAD_MICS = new Set(["TWSF","TWEM","TSEF","TSIR","TSAF","TCDS","TREU","TEUR","TEIR"]);
+        const others0 = newt.filter(r => !["CALL","PUT"].includes(r.option_type_decoded));
+        const tradGroups = {};
+        others0.forEach((r,i) => {
+          if (String(r.option_type_decoded).toUpperCase()!=="STR" || !TRAD_MICS.has(r.platform_identifier)) return;
+          const k = [r.event_timestamp, r.strike_pct, r.opt_tenor, r.swp_tenor, r.notional_leg1, r.platform_identifier].join("|");
+          (tradGroups[k] = tradGroups[k] || []).push(i);
+        });
+        const tradSkip = new Set(); const tradAdd = {};
+        Object.values(tradGroups).forEach(ids => {
+          for (let j=0; j+1<ids.length; j+=2) { tradSkip.add(ids[j+1]); tradAdd[ids[j]] = ids[j+1]; }
+        });
+        const others = others0.map((r,i) => {
+          if (tradSkip.has(i)) return null;
+          if (tradAdd[i] != null) {
+            const l2 = others0[tradAdd[i]];
+            return {...r, premium_amount: (parseFloat(r.premium_amount||0) + parseFloat(l2.premium_amount||0))};
+          }
+          return r;
+        }).filter(Boolean);
         const allTrades = [
           ...straddles,
           ...payers.filter(r => !pairedPayerIds.has(r.dissemination_id)),
           ...rcvrs.filter(r => !pairedRcvrIds.has(r.dissemination_id)),
-          ...newt.filter(r => !["CALL","PUT"].includes(r.option_type_decoded)),
+          ...others,
         ]
           .filter(r=>typF.length===0||typF.includes(typeLabel(r.option_type_decoded)))
           .filter(r=>venF.length===0||venF.includes(venueName(r.platform_identifier)));
@@ -3241,6 +3265,17 @@ export default function App() {
         const venSel=sdrVenueRef.current||[];
         const _hw=sdrHiWater.current[ccy];
         if(!_hw) return;                                 // no valid seed yet — fail closed, no toasts
+        // HARD market-hours gate: never toast while this currency's market is closed,
+        // regardless of row timestamps (kills phantom/re-stamped rows on quiet days).
+        // Fails CLOSED on any error.
+        const _MKT_TZ={USD:"America/New_York",CAD:"America/New_York",EUR:"Europe/London",GBP:"Europe/London",AUD:"Australia/Sydney",NZD:"Pacific/Auckland",JPY:"Asia/Tokyo"};
+        const _mktOpen=(c)=>{try{
+          const parts=new Intl.DateTimeFormat("en-GB",{timeZone:_MKT_TZ[c]||"America/New_York",hour:"2-digit",hour12:false,weekday:"short"}).formatToParts(new Date());
+          const h=+parts.find(x=>x.type==="hour").value, wd=parts.find(x=>x.type==="weekday").value;
+          if(wd==="Sat"||wd==="Sun") return false;
+          return h>=7 && h<18;
+        }catch(e){ return false; }};
+        if(!_mktOpen(ccy)) return;
         let _fired=0;
         for(const r of [...rows].reverse()){            // oldest->newest so toasts stack in order
           const key=_sdrKeyOf(r);
@@ -3708,7 +3743,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0307e</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0307g</span>
       </div>
 
       {/* HEADER */}
