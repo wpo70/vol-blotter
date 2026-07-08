@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 0907a
+// RateEdge vol-blotter 0907b
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -2669,6 +2669,7 @@ function SdrTapePanel({ mainCcy }) {
   }, [mainCcy]);
   const [sessIdx, setSessIdx] = useState(0);        // 0 = latest session, 1 = previous
   const [typeF, setTypeF]     = useState("ALL");
+  const [venF, setVenF]       = useState("ALL");
   const TZ = "Australia/Brisbane";
 
   const fetchTape = useCallback(async () => {
@@ -2707,6 +2708,29 @@ function SdrTapePanel({ mainCcy }) {
   const rows = useMemo(() => {
     let base = allRows.filter(r => r.trade_date === sessionDate);
     if (ccyF !== "BOTH") base = base.filter(r => r.notional_ccy === ccyF);
+    // Drop junk: rows with NO strike AND NO premium are misdecoded non-option
+    // records (the phantom "Cap — —" noise) — real option prints carry at least one.
+    base = base.filter(r => {
+      const hasK = r.strike_pct != null && String(r.strike_pct) !== "";
+      const hasP = parseFloat(r.premium_amount||0) > 0;
+      return hasK || hasP;
+    });
+    // Tradition reports a straddle as TWO 'STR' leg prints at HALF premium each —
+    // merge pairs (same ts/strike/tenors/notional/MIC) into one full-premium straddle.
+    const TRAD = new Set(["TWSF","TWEM","TSEF","TSIR","TSAF","TCDS","TREU","TEUR","TEIR"]);
+    const _grp = {};
+    base.forEach((r,i) => {
+      if (String(r.option_type_decoded).toUpperCase()!=="STR" || !TRAD.has(r.platform_identifier)) return;
+      const k=[r.event_timestamp,r.strike_pct,r.opt_tenor,r.swp_tenor,r.notional_leg1,r.platform_identifier].join("|");
+      (_grp[k]=_grp[k]||[]).push(i);
+    });
+    const _skip=new Set(), _fold={};
+    Object.values(_grp).forEach(ids=>{ for(let j=0;j+1<ids.length;j+=2){ _skip.add(ids[j+1]); _fold[ids[j]]=ids[j+1]; } });
+    base = base.map((r,i)=>{
+      if (_skip.has(i)) return null;
+      if (_fold[i]!=null){ const l2=base[_fold[i]]; return {...r, premium_amount:(parseFloat(r.premium_amount||0)+parseFloat(l2.premium_amount||0))}; }
+      return r;
+    }).filter(Boolean);
     const payers = base.filter(r => r.option_type_decoded === "CALL");
     const rcvrs  = base.filter(r => r.option_type_decoded === "PUT");
     const pairedR = new Set(), pairedP = new Set();
@@ -2723,12 +2747,15 @@ function SdrTapePanel({ mainCcy }) {
       if (pairedR.has(r.dissemination_id) || pairedP.has(r.dissemination_id)) return;
       let typ;
       if (!r.swp_tenor || String(r.swp_tenor).trim()==="") typ = r.option_type_decoded==="PUT" ? "Floor" : "Cap";
-      else typ = r.option_type_decoded==="CALL" ? "Payer" : r.option_type_decoded==="PUT" ? "Receiver" : (r.option_type_decoded||"—");
+      else typ = r.option_type_decoded==="CALL" ? "Payer" : r.option_type_decoded==="PUT" ? "Receiver" : (String(r.option_type_decoded||"").toUpperCase()==="STR" ? "Straddle" : (r.option_type_decoded||"—"));
       out.push({...r, _type:typ, _prem:parseFloat(r.premium_amount||0)||null});
     });
     out.sort((a,b)=> new Date(b.event_timestamp) - new Date(a.event_timestamp));
-    return typeF==="ALL" ? out : out.filter(r => r._type===typeF);
-  }, [allRows, sessionDate, ccyF, typeF]);
+    let out2 = typeF==="ALL" ? out : out.filter(r => r._type===typeF);
+    if (venF!=="ALL") out2 = out2.filter(r => venueName(r.platform_identifier)===venF);
+    return out2;
+  }, [allRows, sessionDate, ccyF, typeF, venF]);
+  const venues = useMemo(() => ["ALL", ...[...new Set(allRows.filter(r=>r.trade_date===sessionDate).map(r=>venueName(r.platform_identifier)))].sort()], [allRows, sessionDate]);
 
   const fmtT = (ts)=>{ try { return new Intl.DateTimeFormat("en-GB",{timeZone:TZ,hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}).format(new Date(ts)); } catch { return ""; } };
   const fmtDate = (d)=>{ if(!d) return "—"; try { return new Intl.DateTimeFormat("en-GB",{timeZone:TZ,weekday:"short",day:"2-digit",month:"short"}).format(new Date(d+"T12:00:00Z")); } catch { return d; } };
@@ -2754,6 +2781,8 @@ function SdrTapePanel({ mainCcy }) {
         {["BOTH","USD","EUR","GBP"].map(c=><button key={c} onClick={()=>setCcyF(c)} style={chip(ccyF===c)}>{c}</button>)}
         <span style={{color:"#2a4060"}}>·</span>
         {TYPES.map(t=><button key={t} onClick={()=>setTypeF(t)} style={{...chip(typeF===t),color:typeF===t?"#90c8f0":(t==="ALL"?"#406080":tCol(t)),fontSize:7,padding:"2px 5px"}}>{t}</button>)}
+        <span style={{color:"#2a4060"}}>·</span>
+        {venues.map(v=><button key={v} onClick={()=>setVenF(v)} style={{...chip(venF===v),fontSize:7,padding:"2px 5px"}}>{v}</button>)}
         <span style={{marginLeft:"auto",color:"#3a6080",fontSize:8}}>{loading?"loading…":`${rows.length} trades`}</span>
         <button onClick={fetchTape} style={{...chip(false),fontSize:8}}>↻</button>
       </div>
@@ -3748,7 +3777,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0907a</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0907b</span>
       </div>
 
       {/* HEADER */}
