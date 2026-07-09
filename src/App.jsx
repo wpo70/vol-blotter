@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 0907c
+// RateEdge vol-blotter 0907e
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -2669,7 +2669,13 @@ function SdrTapePanel({ mainCcy }) {
   }, [mainCcy]);
   const [sessIdx, setSessIdx] = useState(0);        // 0 = latest session, 1 = previous
   const [typeF, setTypeF]     = useState("ALL");
-  const [venF, setVenF]       = useState([]);   // [] = ALL; else list of selected venues (toggle)
+  const [venMap, setVenMap]   = useState(() => { try { return JSON.parse(localStorage.getItem("vbl_tape_venues")||"{}"); } catch { return {}; } });
+  const venF = venMap[ccyF] || [];              // [] = ALL; else selected venues for THIS ccy
+  const setVen = (next) => setVenMap(m => {
+    const nm = {...m, [ccyF]: (typeof next==="function" ? next(m[ccyF]||[]) : next)};
+    try { localStorage.setItem("vbl_tape_venues", JSON.stringify(nm)); } catch {}
+    return nm;
+  });
   const TZ = "Australia/Brisbane";
 
   const fetchTape = useCallback(async () => {
@@ -2754,8 +2760,14 @@ function SdrTapePanel({ mainCcy }) {
     let out2 = typeF==="ALL" ? out : out.filter(r => r._type===typeF);
     if (venF.length) out2 = out2.filter(r => venF.includes(venueName(r.platform_identifier)));
     return out2;
-  }, [allRows, sessionDate, ccyF, typeF, venF]);
-  const venues = useMemo(() => ["ALL", ...[...new Set(allRows.filter(r=>r.trade_date===sessionDate).map(r=>venueName(r.platform_identifier)))].sort()], [allRows, sessionDate]);
+  }, [allRows, sessionDate, ccyF, typeF, venMap]);
+  // Full broker/MIC list ALWAYS shown (union of the platform map + anything in the data)
+  // — previously derived from today's rows only, so quiet sessions dropped ICAP/BGC/etc.
+  const venues = useMemo(() => {
+    const fixed = new Set(Object.values(PLATFORM_NAMES));
+    allRows.filter(r=>r.trade_date===sessionDate).forEach(r=>fixed.add(venueName(r.platform_identifier)));
+    return ["ALL", ...[...fixed].filter(Boolean).sort()];
+  }, [allRows, sessionDate]);
 
   const fmtT = (ts)=>{ try { return new Intl.DateTimeFormat("en-GB",{timeZone:TZ,hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}).format(new Date(ts)); } catch { return ""; } };
   const fmtDate = (d)=>{ if(!d) return "—"; try { return new Intl.DateTimeFormat("en-GB",{timeZone:TZ,weekday:"short",day:"2-digit",month:"short"}).format(new Date(d+"T12:00:00Z")); } catch { return d; } };
@@ -2784,7 +2796,7 @@ function SdrTapePanel({ mainCcy }) {
         <span style={{color:"#2a4060"}}>·</span>
         {venues.map(v=>{
           const on = v==="ALL" ? venF.length===0 : venF.includes(v);
-          const click = () => v==="ALL" ? setVenF([]) : setVenF(p => p.includes(v) ? p.filter(x=>x!==v) : [...p, v]);
+          const click = () => v==="ALL" ? setVen([]) : setVen(p => p.includes(v) ? p.filter(x=>x!==v) : [...p, v]);
           return <button key={v} onClick={click} style={{...chip(on),fontSize:7,padding:"2px 5px"}}>{v}</button>;
         })}
         <span style={{marginLeft:"auto",color:"#3a6080",fontSize:8}}>{loading?"loading…":`${rows.length} trades`}</span>
@@ -3781,7 +3793,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0907c</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0907e</span>
       </div>
 
       {/* HEADER */}
