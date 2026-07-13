@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 0907f
+// RateEdge vol-blotter 0907g
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -2761,14 +2761,9 @@ function SdrTapePanel({ mainCcy }) {
     if (venF.length) out2 = out2.filter(r => venF.includes(venueName(r.platform_identifier)));
     return out2;
   }, [allRows, sessionDate, ccyF, typeF, venMap]);
-  // Full broker list ALWAYS shown — the same curated venue universe as the main
-  // window's VENUE selector (VENUE_GROUPS), plus anything extra found in the data.
-  // Previously derived from today's rows only, so quiet sessions collapsed to 1-2 chips.
-  const venues = useMemo(() => {
-    const fixed = new Set(VENUE_GROUPS.map(g => g.name));
-    allRows.filter(r=>r.trade_date===sessionDate).forEach(r=>fixed.add(venueName(r.platform_identifier)));
-    return ["ALL", ...[...fixed].filter(Boolean).sort()];
-  }, [allRows, sessionDate]);
+  // EXACTLY the main window's VENUE selector list — same names, same order.
+  // No data-derived extras (they leaked dealer noise like HSBC/ICE/RTX/Tradeweb).
+  const venues = useMemo(() => ["ALL", ...VENUE_GROUPS.map(g => g.name)], []);
 
   const fmtT = (ts)=>{ try { return new Intl.DateTimeFormat("en-GB",{timeZone:TZ,hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}).format(new Date(ts)); } catch { return ""; } };
   const fmtDate = (d)=>{ if(!d) return "—"; try { return new Intl.DateTimeFormat("en-GB",{timeZone:TZ,weekday:"short",day:"2-digit",month:"short"}).format(new Date(d+"T12:00:00Z")); } catch { return d; } };
@@ -3794,7 +3789,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0907f</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0907g</span>
       </div>
 
       {/* HEADER */}
