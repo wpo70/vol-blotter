@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 0907e
+// RateEdge vol-blotter 0907f
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -2761,10 +2761,11 @@ function SdrTapePanel({ mainCcy }) {
     if (venF.length) out2 = out2.filter(r => venF.includes(venueName(r.platform_identifier)));
     return out2;
   }, [allRows, sessionDate, ccyF, typeF, venMap]);
-  // Full broker/MIC list ALWAYS shown (union of the platform map + anything in the data)
-  // — previously derived from today's rows only, so quiet sessions dropped ICAP/BGC/etc.
+  // Full broker list ALWAYS shown — the same curated venue universe as the main
+  // window's VENUE selector (VENUE_GROUPS), plus anything extra found in the data.
+  // Previously derived from today's rows only, so quiet sessions collapsed to 1-2 chips.
   const venues = useMemo(() => {
-    const fixed = new Set(Object.values(PLATFORM_NAMES));
+    const fixed = new Set(VENUE_GROUPS.map(g => g.name));
     allRows.filter(r=>r.trade_date===sessionDate).forEach(r=>fixed.add(venueName(r.platform_identifier)));
     return ["ALL", ...[...fixed].filter(Boolean).sort()];
   }, [allRows, sessionDate]);
@@ -3793,7 +3794,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0907e</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0907f</span>
       </div>
 
       {/* HEADER */}
