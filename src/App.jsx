@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 0907k
+// RateEdge vol-blotter 0907l
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -335,7 +335,7 @@ const PLATFORM_NAMES = {
   "TPSE":"Tullett Prebon","TPIR":"Tullett Prebon","TPEU":"Tullett Prebon",
   "IGDL":"ICAP","ISWE":"ICAP (E)","ISWV":"ICAP (V)","IOTF":"ICAP",
   "IOIR":"ICAP UK OTF","IMRD":"TP ICAP UK MTF",
-  "TWSF":"Tradition","TWEM":"Tradition","TSEF":"Tradition","TSIR":"Tradition","UTSL":"Tradition",
+  "TWSF":"Tradition","TWEM":"Tradition","TSEF":"Tradition","TSIR":"Tradition","UTSL":"Tradition","TSIG":"Tradition",
   "TSAF":"Tradition","TCDS":"Tradition","TREU":"Tradition","TEUR":"Tradition","TEIR":"Tradition",
   "GSEF":"GFI","GFSO":"GFI",
   "BBSF":"Bloomberg","BMTF":"Bloomberg","BTFE":"Bloomberg","BLOM":"Bloomberg",
@@ -3803,7 +3803,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0907k</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0907l</span>
       </div>
 
       {/* HEADER */}
