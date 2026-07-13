@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 0907h
+// RateEdge vol-blotter 0907i
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -2665,7 +2665,7 @@ function SdrTapePanel({ mainCcy }) {
   // Follow the main blotter currency: switching the sidebar chip switches the tape
   // filter automatically (user can still click BOTH/another ccy manually afterwards).
   React.useEffect(() => {
-    if (mainCcy && ["USD","EUR","GBP"].includes(mainCcy)) setCcyF(mainCcy);
+    if (mainCcy && ["USD","EUR","GBP","JPY"].includes(mainCcy)) setCcyF(mainCcy);
   }, [mainCcy]);
   const [sessIdx, setSessIdx] = useState(0);        // 0 = latest session, 1 = previous
   const [typeF, setTypeF]     = useState("ALL");
@@ -2700,8 +2700,8 @@ function SdrTapePanel({ mainCcy }) {
         }
         return out;
       };
-      const [usd, eur, gbp] = await Promise.all([pull("USD"), pull("EUR"), pull("GBP")]);
-      setAllRows([...usd, ...eur, ...gbp]);
+      const [usd, eur, gbp, jpy] = await Promise.all([pull("USD"), pull("EUR"), pull("GBP"), pull("JPY")]);
+      setAllRows([...usd, ...eur, ...gbp, ...jpy]);
     } catch(e) { setErr(String((e&&e.message)||e)); }
     setLoading(false);
   }, []);
@@ -2769,7 +2769,7 @@ function SdrTapePanel({ mainCcy }) {
   const fmtDate = (d)=>{ if(!d) return "—"; try { return new Intl.DateTimeFormat("en-GB",{timeZone:TZ,weekday:"short",day:"2-digit",month:"short"}).format(new Date(d+"T12:00:00Z")); } catch { return d; } };
   const fmtN = (n)=> (n==null||n==="") ? "—" : (Math.abs(+n)>=1e9 ? `${(+n/1e9).toFixed(2)}B` : Math.abs(+n)>=1e6 ? `${(+n/1e6).toFixed(0)}M` : `${Math.round(+n)}`);
   const tCol = (t)=>({Payer:"#00c040",Receiver:"#ff8c00",Straddle:"#c080f0",Strangle:"#e0a040",Cap:"#40b0e0",Floor:"#e07040"}[t]||"#90a8c0");
-  const cCol = (c)=>({USD:"#5a9fd4",EUR:"#d4af5a",GBP:"#5ecb8a"}[c]||"#90a8c0");
+  const cCol = (c)=>({USD:"#5a9fd4",EUR:"#d4af5a",GBP:"#5ecb8a",JPY:"#e0709a"}[c]||"#90a8c0");
 
   const chip = (on)=>({fontSize:8,padding:"2px 7px",borderRadius:3,cursor:"pointer",fontFamily:"inherit",fontWeight:700,letterSpacing:".05em",
     border:`1px solid ${on?"rgba(60,130,230,.5)":"#1e3450"}`, background:on?"rgba(30,80,180,.45)":"rgba(15,35,70,.4)", color:on?"#90c8f0":"#406080"});
@@ -2786,7 +2786,7 @@ function SdrTapePanel({ mainCcy }) {
         <button onClick={()=>setSessIdx(0)} style={chip(sessIdx===0)}>THIS · {fmtDate(sessions[0])}</button>
         <button onClick={()=>setSessIdx(1)} style={chip(sessIdx===1)} disabled={!sessions[1]}>PREV · {fmtDate(sessions[1])}</button>
         <span style={{color:"#2a4060"}}>·</span>
-        {["BOTH","USD","EUR","GBP"].map(c=><button key={c} onClick={()=>setCcyF(c)} style={chip(ccyF===c)}>{c}</button>)}
+        {["BOTH","USD","EUR","GBP","JPY"].map(c=><button key={c} onClick={()=>setCcyF(c)} style={chip(ccyF===c)}>{c}</button>)}
         <span style={{color:"#2a4060"}}>·</span>
         {TYPES.map(t=><button key={t} onClick={()=>setTypeF(t)} style={{...chip(typeF===t),color:typeF===t?"#90c8f0":(t==="ALL"?"#406080":tCol(t)),fontSize:7,padding:"2px 5px"}}>{t}</button>)}
         <span style={{color:"#2a4060"}}>·</span>
@@ -3333,6 +3333,9 @@ export default function App() {
           seenSdrKeys.current.add(key);
           const et=r.event_timestamp||"";
           if(!et || et <= _hw) continue;                 // only prints strictly newer than blotter-open (fail closed on missing ts)
+          // junk gate: mis-decoded records (e.g. vanilla TONA swaps labelled 'CFS')
+          // carry NO strike and NO premium — a real option print always has one.
+          if(!((r.strike_pct!=null && String(r.strike_pct)!=="") || (parseFloat(r.premium_amount||0)>0))) continue;
           if(venSel.length && !venSel.includes(PLATFORM_NAMES[r.platform_identifier]||r.platform_identifier)) continue;  // honour venue filter
           if((Number(r.notional_leg1)||0) < minNot) continue;
           if(_fired>=10) break;                          // cap per tick — never a wall of toasts
@@ -3793,7 +3796,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0907h</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0907i</span>
       </div>
 
       {/* HEADER */}
