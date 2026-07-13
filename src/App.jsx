@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 0907i
+// RateEdge vol-blotter 0907j
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -2708,7 +2708,14 @@ function SdrTapePanel({ mainCcy }) {
 
   useEffect(() => { fetchTape(); const t = setInterval(fetchTape, 60000); return ()=>clearInterval(t); }, [fetchTape]);
 
-  const sessions = useMemo(() => [...new Set(allRows.map(r=>r.trade_date).filter(Boolean))].sort().reverse(), [allRows]);
+  // Sessions = dates that have at least one REAL print (junk rows excluded) —
+  // otherwise junk-only dates (e.g. a Sunday carrying only mis-decoded records)
+  // appear as sessions and PREV points at an empty weekend day instead of the
+  // last business day. Also handles holidays automatically.
+  const sessions = useMemo(() => {
+    const ok = allRows.filter(r => (r.strike_pct!=null && String(r.strike_pct)!=="") || (parseFloat(r.premium_amount||0)>0));
+    return [...new Set(ok.map(r=>r.trade_date).filter(Boolean))].sort().reverse();
+  }, [allRows]);
   const sessionDate = sessions[sessIdx] || sessions[0] || null;
 
   const rows = useMemo(() => {
@@ -3796,7 +3803,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0907i</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0907j</span>
       </div>
 
       {/* HEADER */}
