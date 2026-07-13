@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 0907g
+// RateEdge vol-blotter 0907h
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -2805,7 +2805,7 @@ function SdrTapePanel({ mainCcy }) {
             <tr>
               <th style={th}>TIME (AEST)</th><th style={th}>CCY</th><th style={th}>TYPE</th>
               <th style={th}>EXP</th><th style={th}>TENOR</th><th style={{...th,textAlign:"right"}}>STRIKE%</th>
-              <th style={{...th,textAlign:"right"}}>NOTIONAL</th><th style={{...th,textAlign:"right"}}>PREMIUM</th><th style={th}>VENUE</th>
+              <th style={{...th,textAlign:"right"}}>NOTIONAL</th><th style={{...th,textAlign:"right"}}>PREM (BP)</th><th style={th}>VENUE</th>
             </tr>
           </thead>
           <tbody>
@@ -2818,7 +2818,11 @@ function SdrTapePanel({ mainCcy }) {
                 <td style={{...td,color:"#b0bcc8"}}>{r.swp_tenor||"—"}</td>
                 <td style={{...td,textAlign:"right",color:"#90a8c0"}}>{r.strike_pct!=null?Number(r.strike_pct).toFixed(3):"—"}{r._strike2!=null?` / ${Number(r._strike2).toFixed(3)}`:""}</td>
                 <td style={{...td,textAlign:"right",color:"#c8d4e0",fontWeight:700}}>{fmtN(r.notional_leg1)}</td>
-                <td style={{...td,textAlign:"right",color:"#90a8c0"}}>{fmtN(r._prem)}</td>
+                <td style={{...td,textAlign:"right",color:"#90a8c0"}}>{(()=>{
+                  const nt=parseFloat(r.notional_leg1||0);
+                  if(r._prem&&nt>0) return (r._prem/nt*1e4).toFixed(1);
+                  return r._prem?fmtN(r._prem):"\u2014";
+                })()}</td>
                 <td style={{...td,color:bkc(venueName(r.platform_identifier))}}>{venueName(r.platform_identifier)}</td>
               </tr>
             ))}
@@ -3789,7 +3793,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0907g</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0907h</span>
       </div>
 
       {/* HEADER */}
