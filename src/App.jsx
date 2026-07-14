@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 0907l
+// RateEdge vol-blotter 0907n
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -2585,7 +2585,7 @@ function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatfor
         // strike/tenor/notional, each at HALF premium. Merge pairs so cells show ONE
         // straddle at the summed (full) premium — same logic as the pricer tape.
         // All other venues' STR prints untouched.
-        const TRAD_MICS = new Set(["TWSF","TWEM","TSEF","TSIR","TSAF","TCDS","TREU","TEUR","TEIR"]);
+        const TRAD_MICS = new Set(["TWSF","TWEM","TSEF","TSIR","TSAF","TCDS","TREU","TEUR","TEIR","TSIG"]);
         const others0 = newt.filter(r => !["CALL","PUT"].includes(r.option_type_decoded));
         const tradGroups = {};
         others0.forEach((r,i) => {
@@ -2730,7 +2730,7 @@ function SdrTapePanel({ mainCcy }) {
     });
     // Tradition reports a straddle as TWO 'STR' leg prints at HALF premium each —
     // merge pairs (same ts/strike/tenors/notional/MIC) into one full-premium straddle.
-    const TRAD = new Set(["TWSF","TWEM","TSEF","TSIR","TSAF","TCDS","TREU","TEUR","TEIR"]);
+    const TRAD = new Set(["TWSF","TWEM","TSEF","TSIR","TSAF","TCDS","TREU","TEUR","TEIR","TSIG"]);
     const _grp = {};
     base.forEach((r,i) => {
       if (String(r.option_type_decoded).toUpperCase()!=="STR" || !TRAD.has(r.platform_identifier)) return;
@@ -2754,7 +2754,16 @@ function SdrTapePanel({ mainCcy }) {
       let typ = "Straddle";
       if (!m) { m = rcvrs.find(r => !pairedR.has(r.dissemination_id) && r.swp_tenor===p.swp_tenor && r.opt_tenor===p.opt_tenor && Math.abs(new Date(r.event_timestamp).getTime()-tp)<=120000); typ = "Strangle"; }
       if (m) { pairedR.add(m.dissemination_id); pairedP.add(p.dissemination_id);
-        out.push({...p, _type:typ, _prem:(parseFloat(p.premium_amount||0)+parseFloat(m.premium_amount||0))||null, _strike2:m.strike_pct}); }
+        // Paired premium — IDENTICAL logic to the pricer's pairing:
+        // same-strike pair on a dedup MIC => both legs carry the FULL straddle
+        // premium (double-reported) => combined = max(leg); otherwise sum.
+        // Strangles/RRs (different strikes) always sum — deduping corrupts them.
+        const PREM_DEDUP_MICS = new Set(["BGCD","BGCO","BGCI","TPSE","TPIR","TPEU","TSEF","TSIR","TSAF","TWSF","TWEM","IGDL","ISWE","ISWV","IOIR","IMRD","GSEF","GFSO","BILT","XXXX"]);
+        const _pp = parseFloat(p.premium_amount||0), _rp = parseFloat(m.premium_amount||0);
+        const _sameK = Math.abs(parseFloat(p.strike_pct||0) - parseFloat(m.strike_pct||0)) < 0.01;
+        const _dedup = _sameK && PREM_DEDUP_MICS.has(String(p.platform_identifier||"")) && _pp>0 && _rp>0;
+        const _comb = _dedup ? Math.max(_pp,_rp) : (_pp+_rp);
+        out.push({...p, _type:typ, _prem:_comb||null, _strike2:m.strike_pct}); }
     });
     base.forEach(r => {
       if (pairedR.has(r.dissemination_id) || pairedP.has(r.dissemination_id)) return;
@@ -3803,7 +3812,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0907l</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0907n</span>
       </div>
 
       {/* HEADER */}
