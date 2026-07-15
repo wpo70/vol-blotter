@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 0907n
+// RateEdge vol-blotter 0907p
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -2966,7 +2966,7 @@ export default function App() {
     }
     setMidsLoading(true);
     try {
-      const _ccy = ccyOverride || activeCcy || "AUD";
+      const _ccy = (typeof ccyOverride === "string" && ccyOverride) || activeCcy || "AUD";
       const [volSnap, fwdRows, wedgeRows] = await Promise.all([
         fetchLatestVols(_ccy),
         _ccy === "AUD" ? fetchLatestAudFwdRates() : fetchLatestFwdRates(_ccy),
@@ -3812,7 +3812,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0907n</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0907p</span>
       </div>
 
       {/* HEADER */}
@@ -3838,7 +3838,7 @@ export default function App() {
             {viewMode==="vol"?"bpVOL":"bpPREM"}
           </button>
           <button
-            onClick={loadFreshMids}
+            onClick={() => loadFreshMids()}
             disabled={midsLoading}
             style={{background:midsLoaded?"rgba(20,120,60,.35)":"rgba(20,50,80,.5)",border:`1px solid ${midsLoaded?"rgba(40,200,100,.4)":"#2e4e78"}`,color:midsLoaded?"#40d880":"#5a96c8",padding:"3px 10px",borderRadius:3,cursor:midsLoading?"wait":"pointer",fontSize:9,fontFamily:"inherit",letterSpacing:".08em",transition:"all .2s"}}>
             {midsLoading ? "⏳ LOADING..." : midsLoaded ? `🔄 MIDS ${midsLoaded}` : "🔄 LOAD FRESH MIDS"}
