@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 0907p
+// RateEdge vol-blotter 1507c
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -2758,7 +2758,7 @@ function SdrTapePanel({ mainCcy }) {
         // same-strike pair on a dedup MIC => both legs carry the FULL straddle
         // premium (double-reported) => combined = max(leg); otherwise sum.
         // Strangles/RRs (different strikes) always sum — deduping corrupts them.
-        const PREM_DEDUP_MICS = new Set(["BGCD","BGCO","BGCI","TPSE","TPIR","TPEU","TSEF","TSIR","TSAF","TWSF","TWEM","IGDL","ISWE","ISWV","IOIR","IMRD","GSEF","GFSO","BILT","XXXX"]);
+        const PREM_DEDUP_MICS = new Set(["BGCD","BGCO","BGCI","TPSE","TPIR","TPEU","TSEF","TSIR","TSAF","TWSF","TWEM","UTSL","UTST","TSIG","IGDL","ISWE","ISWV","IOIR","IMRD","GSEF","GFSO","BILT","XXXX"]);
         const _pp = parseFloat(p.premium_amount||0), _rp = parseFloat(m.premium_amount||0);
         const _sameK = Math.abs(parseFloat(p.strike_pct||0) - parseFloat(m.strike_pct||0)) < 0.01;
         const _dedup = _sameK && PREM_DEDUP_MICS.has(String(p.platform_identifier||"")) && _pp>0 && _rp>0;
@@ -3299,6 +3299,7 @@ export default function App() {
     const ccy=activeCcy;
     let stop=false;
     const _fmtN=(n)=> n==null?"":(n>=1e9?`${(n/1e9).toFixed(2)}B`:n>=1e6?`${(n/1e6).toFixed(0)}M`:`${Math.round(n)}`);
+    const pendingLegs = { current: [] };   // unpaired CALL/PUT legs held ONE tick for a mate
     const _fmtAlert=(r)=>{
       const tn=[r.opt_tenor,r.swp_tenor].filter(Boolean).join("\u00d7");
       const prem=r.premium_amount!=null?`  Prem ${_fmtN(r.premium_amount)}`:"";
@@ -3342,7 +3343,8 @@ export default function App() {
           return h>=7 && h<18;
         }catch(e){ return false; }};
         if(!_mktOpen(ccy)) return;
-        let _fired=0;
+        // ── collect eligible rows (all existing gates unchanged), then PAIR before toasting ──
+        const _elig=[];
         for(const r of [...rows].reverse()){            // oldest->newest so toasts stack in order
           const key=_sdrKeyOf(r);
           if(seenSdrKeys.current.has(key)) continue;     // already shown/dismissed this session
@@ -3354,10 +3356,63 @@ export default function App() {
           if(!((r.strike_pct!=null && String(r.strike_pct)!=="") || (parseFloat(r.premium_amount||0)>0))) continue;
           if(venSel.length && !venSel.includes(PLATFORM_NAMES[r.platform_identifier]||r.platform_identifier)) continue;  // honour venue filter
           if((Number(r.notional_leg1)||0) < minNot) continue;
-          if(_fired>=10) break;                          // cap per tick — never a wall of toasts
-          addToast(_fmtAlert(r), "sdr", true);           // sticky — manual dismiss only
-          _fired++;
+          _elig.push(r);
         }
+        // Pair CALL+PUT legs into structures — SAME rules as the tape pairing:
+        // match ccy + expiry + tenor + notional within 180s; same strike => STRADDLE
+        // with premium deduped per the venue set (max leg) else summed; different
+        // strikes => R/R with both strikes shown. Unpaired legs are HELD one tick
+        // so a mate disseminating in the next batch still pairs; then toast single.
+        // Pairing criteria IDENTICAL to the pricer (app_streamlit pairing block):
+        //   match  : same expiry + same ccy + same swp_tenor (or both empty),
+        //            receiver notional within 1% of payer's, within 600s
+        //   choose : ranked — exact same-strike first (straddle partner), then
+        //            nearest strike, then closest in time; each leg consumed once
+        const _isCP=(r)=>["CALL","PUT"].includes(String(r.option_type_decoded||"").toUpperCase());
+        const _pool=[...pendingLegs.current.map(x=>x.row), ..._elig.filter(_isCP)];
+        const _nonCP=_elig.filter(r=>!_isCP(r));
+        const _calls=_pool.filter(r=>String(r.option_type_decoded).toUpperCase()==="CALL");
+        const _puts =_pool.filter(r=>String(r.option_type_decoded).toUpperCase()==="PUT");
+        const _usedPut=new Set(); const _usedCallIds=new Set(); const _pairs=[];
+        const _emptyT=(t)=>!t||["\u2014","NA","None",""].includes(String(t));
+        for(const c of _calls){
+          const cK=parseFloat(c.strike_pct||0), cN=parseFloat(c.notional_leg1||0), cT=new Date(c.event_timestamp);
+          const cands=_puts.map((r,ix)=>({r,ix}))
+            .filter(({r,ix})=>!_usedPut.has(ix)
+              && r.notional_ccy===c.notional_ccy
+              && String(r.opt_tenor||"")===String(c.opt_tenor||"")
+              && (_emptyT(c.swp_tenor) ? _emptyT(r.swp_tenor) : String(r.swp_tenor||"")===String(c.swp_tenor||""))
+              && Math.abs(parseFloat(r.notional_leg1||0)-cN)<=0.01*cN
+              && Math.abs(new Date(r.event_timestamp)-cT)<=600000)
+            .map(x=>{const rK=parseFloat(x.r.strike_pct||0);
+              return {...x, same:Math.abs(rK-cK)<0.01?1:0, gap:Math.abs(rK-cK),
+                      tsec:Math.abs(new Date(x.r.event_timestamp)-cT)};})
+            .sort((a,b)=> (b.same-a.same) || (a.gap-b.gap) || (a.tsec-b.tsec));
+          if(cands.length){ _usedPut.add(cands[0].ix); _usedCallIds.add(c.dissemination_id); _pairs.push([c,cands[0].r]); }
+        }
+        const _used=null; // (superseded by _usedPut/_usedCallIds)
+        const PREM_DEDUP_MICS=new Set(["BGCD","BGCO","BGCI","TPSE","TPIR","TPEU","TSEF","TSIR","TSAF","TWSF","TWEM","UTSL","UTST","TSIG","IGDL","ISWE","ISWV","IOIR","IMRD","GSEF","GFSO","BILT","XXXX"]);
+        let _fired=0;
+        const _toast=(m)=>{ if(_fired<10){ addToast(m,"sdr",true); _fired++; } };
+        for(const [c,pu] of _pairs){
+          const pp=parseFloat(c.premium_amount||0), rp=parseFloat(pu.premium_amount||0);
+          const sameK=Math.abs(parseFloat(c.strike_pct||0)-parseFloat(pu.strike_pct||0))<0.01;
+          const comb=(sameK && PREM_DEDUP_MICS.has(String(c.platform_identifier||"")) && pp>0 && rp>0)?Math.max(pp,rp):(pp+rp);
+          const merged={...c, option_type_decoded: sameK?"STRADDLE":"R/R", premium_amount: comb||null};
+          _toast(_fmtAlert(merged)+(sameK?"":`  K2 ${Number(pu.strike_pct||0).toFixed(3)}`));
+        }
+        for(const r of _nonCP) _toast(_fmtAlert(r));     // STR/caps/floors straight through
+        const _pairedPutIds=new Set(_pairs.map(([,r])=>r.dissemination_id));
+        const _next=[];
+        for(const r of _pool){
+          const t=String(r.option_type_decoded).toUpperCase();
+          if(t==="CALL" && _usedCallIds.has(r.dissemination_id)) continue;
+          if(t==="PUT"  && _pairedPutIds.has(r.dissemination_id)) continue;
+          const wasHeld=pendingLegs.current.some(x=>x.row.dissemination_id===r.dissemination_id);
+          if(wasHeld) _toast(_fmtAlert(r));              // waited a tick, no mate — genuine single leg
+          else _next.push({row:r});                      // hold one tick for a late mate
+        }
+        pendingLegs.current=_next;
       }catch(e){ console.warn("[SDR alert]",e); }
     };
     pollAlerts();
@@ -3812,7 +3867,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v0907p</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v1507c</span>
       </div>
 
       {/* HEADER */}
