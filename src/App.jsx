@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 2807a
+// RateEdge vol-blotter 1709a
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -335,7 +335,7 @@ const PLATFORM_NAMES = {
   "TPSE":"Tullett Prebon","TPIR":"Tullett Prebon","TPEU":"Tullett Prebon",
   "IGDL":"ICAP","ISWE":"ICAP (E)","ISWV":"ICAP (V)","IOTF":"ICAP",
   "IOIR":"ICAP UK OTF","IMRD":"TP ICAP UK MTF",
-  "TWSF":"Tradition","TWEM":"Tradition","TSEF":"Tradition","TSIR":"Tradition","UTSL":"Tradition","TSIG":"Tradition",
+  "TWSF":"Tradeweb","TWEM":"Tradeweb","TSEF":"Tradition","TSIR":"Tradition","UTSL":"Tradition","TSIG":"Tradition",
   "TSAF":"Tradition","TCDS":"Tradition","TREU":"Tradition","TEUR":"Tradition","TEIR":"Tradition",
   "GSEF":"GFI","GFSO":"GFI",
   "BBSF":"Bloomberg","BMTF":"Bloomberg","BTFE":"Bloomberg","BLOM":"Bloomberg",
@@ -2872,7 +2872,7 @@ export default function App() {
   const sdrManualPollRef = React.useRef(null);
   const [sdrCfCount, setSdrCfCount] = useState({caps:0,floors:0,total:0});
   const [sdrFilterType,     setSdrFilterType]     = useState(()=>loadLS("vbl_sdr_type",[]));
-  const [sdrFilterPlatform, setSdrFilterPlatform] = useState(()=>loadLS("vbl_sdr_venue2",DEFAULT_VENUE_NAMES));
+  const [sdrFilterPlatform, setSdrFilterPlatform] = useState(()=>{ const v=loadLS("vbl_sdr_venue2",DEFAULT_VENUE_NAMES); return (Array.isArray(v)&&v.includes("Tradition")&&!v.includes("Tradeweb")) ? [...v,"Tradeweb"] : v; });  // 1709a: TWSF/TWEM split out of Tradition
   const [sdrFilterAction,   setSdrFilterAction]   = useState([]);
   const [spreadName,   setSpreadName]   = useState("");
   // Sheet model: leg[0] = BID leg (Lock + Ratio + Bid + Bk; live pulls from matrix),
@@ -3176,7 +3176,7 @@ export default function App() {
     if (!sdrHover) { el.style.display='none'; return; }
     const trades = sdrHover.trades || (sdrHover.sdr ? [sdrHover.sdr] : []);
     if (!trades.length) { el.style.display='none'; return; }
-    const PN = {"BGCD":"BGC","TPSE":"Tullett Prebon","ISWV":"ICAP (V)","IGDL":"ICAP","TWSF":"Tradition","TSEF":"Tradition","GSEF":"GFI","DWSF":"Dealerweb","BILT":"Bilateral","XXXX":"Bilateral"};
+    const PN = PLATFORM_NAMES;
     const ageFmt = ts => { if(!ts) return '—'; const m=Math.round((Date.now()-ts)/60000); return m<60?m+'m ago':Math.round(m/60)+'h ago'; };
     const tradeHtml = trades.map((s,i) => {
       const rows = [
@@ -3867,7 +3867,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v2807a</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v1709a</span>
       </div>
 
       {/* HEADER */}
