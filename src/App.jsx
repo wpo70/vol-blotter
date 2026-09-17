@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 1709a
+// RateEdge vol-blotter 1709b
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -2585,7 +2585,7 @@ function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatfor
         // strike/tenor/notional, each at HALF premium. Merge pairs so cells show ONE
         // straddle at the summed (full) premium — same logic as the pricer tape.
         // All other venues' STR prints untouched.
-        const TRAD_MICS = new Set(["TWSF","TWEM","TSEF","TSIR","TSAF","TCDS","TREU","TEUR","TEIR","TSIG"]);
+        const TRAD_MICS = new Set(["TSEF","TSIR","TSAF","TCDS","TREU","TEUR","TEIR","TSIG"]);
         const others0 = newt.filter(r => !["CALL","PUT"].includes(r.option_type_decoded));
         const tradGroups = {};
         others0.forEach((r,i) => {
@@ -2730,7 +2730,7 @@ function SdrTapePanel({ mainCcy }) {
     });
     // Tradition reports a straddle as TWO 'STR' leg prints at HALF premium each —
     // merge pairs (same ts/strike/tenors/notional/MIC) into one full-premium straddle.
-    const TRAD = new Set(["TWSF","TWEM","TSEF","TSIR","TSAF","TCDS","TREU","TEUR","TEIR","TSIG"]);
+    const TRAD = new Set(["TSEF","TSIR","TSAF","TCDS","TREU","TEUR","TEIR","TSIG"]);
     const _grp = {};
     base.forEach((r,i) => {
       if (String(r.option_type_decoded).toUpperCase()!=="STR" || !TRAD.has(r.platform_identifier)) return;
@@ -3867,7 +3867,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v1709a</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v1709b</span>
       </div>
 
       {/* HEADER */}
