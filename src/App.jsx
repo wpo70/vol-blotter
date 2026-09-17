@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 1709b
+// RateEdge vol-blotter 1709c
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -335,7 +335,7 @@ const PLATFORM_NAMES = {
   "TPSE":"Tullett Prebon","TPIR":"Tullett Prebon","TPEU":"Tullett Prebon",
   "IGDL":"ICAP","ISWE":"ICAP (E)","ISWV":"ICAP (V)","IOTF":"ICAP",
   "IOIR":"ICAP UK OTF","IMRD":"TP ICAP UK MTF",
-  "TWSF":"Tradeweb","TWEM":"Tradeweb","TSEF":"Tradition","TSIR":"Tradition","UTSL":"Tradition","TSIG":"Tradition",
+  "TWSF":"Tradeweb","TWEM":"Tradeweb","TSEF":"Tradition","TSIR":"Tradition","UTSL":"Tradition","UTST":"Tradition","TSIG":"Tradition",
   "TSAF":"Tradition","TCDS":"Tradition","TREU":"Tradition","TEUR":"Tradition","TEIR":"Tradition",
   "GSEF":"GFI","GFSO":"GFI",
   "BBSF":"Bloomberg","BMTF":"Bloomberg","BTFE":"Bloomberg","BLOM":"Bloomberg",
@@ -347,6 +347,7 @@ const PLATFORM_NAMES = {
 const BROKER_MICS = ["BGCD","BGCO","BGCI","AURO","BILT","DWSF","GSEF","GFSO",
   "IGDL","ISWE","ISWV","IOIR","IMRD",
   "TPSE","TPIR","TPEU","TSEF","TSIR","TSAF","TWSF","TWEM",
+  "UTSL","UTST","TSIG",
   "BBSF","BMTF","BTFE","XOFF","XXXX"];
 const NOT_DEFAULT = new Set(["BILT","XXXX","BBSF","BMTF","BTFE","XOFF"]);
 const venueName = (mic) => PLATFORM_NAMES[mic] || mic || "";
@@ -2536,111 +2537,154 @@ function sdrTenToKey(s) {
 }
 
 
+// ═══ SDR PAIRING — ONE implementation used by the cells, the SDR tape and the toasts ═══
+// Line-for-line port of the pricer's Full Trade Analytics pairing
+// (app_streamlit v1109a, _PAIRING_LOGIC_VER "v0807d"). Change it here only.
+const SDR_OT_NORM = {CALL:"CALL",C:"CALL",PAYER:"CALL",PAY:"CALL",CALL_OPTION:"CALL",CALLOPTION:"CALL",
+  PUT:"PUT",P:"PUT",RECEIVER:"PUT",REC:"PUT",RCV:"PUT",PUT_OPTION:"PUT",PUTOPTION:"PUT"};
+const SDR_PREM_DEDUP_MICS = new Set(["BGCD","BGCO","BGCI","TPSE","TPIR","TPEU","TSEF","TSIR","TSAF","TWSF","TWEM",
+  "UTSL","UTST","TSIG","IGDL","ISWE","ISWV","IOIR","IMRD","GSEF","GFSO","BILT","XXXX"]);
+// Venues that print a straddle as TWO 'STR' leg prints at half premium each (pricer _TRAD_MICS)
+const SDR_TRAD_MICS = new Set(["TWSF","TWEM","TSEF","TSIR","TSAF","TCDS","TREU","TEUR","TEIR","TSIG"]);
+const SDR_EXO_TYPES = new Set(["EC","EXOTIC","BARRIER","BERMUDAN","ASIAN","DIGITAL","RANGE"]);
+const SDR_EMPTY_TENS = new Set(["","\u2014","NA","None","nan","NaT","null","undefined"]);
+const sdrNum = (v) => { const n = parseFloat(v); return isFinite(n) ? n : 0; };
+const sdrTsStr = (r) => String(r.execution_timestamp || r.event_timestamp || "");
+const sdrTsMs  = (r) => { const t = Date.parse(r.execution_timestamp || r.event_timestamp); return isFinite(t) ? t : NaN; };
+const sdrTen   = (t) => { const s = String(t==null?"":t).trim(); return SDR_EMPTY_TENS.has(s) ? "" : s; };
+// Pricer post-load fix: DWSF posts strike as % x 100 (398.0 = 3.98%) — only when > 50
+const sdrNormRow = (r) => (r && r.platform_identifier==="DWSF" && sdrNum(r.strike_pct) > 50)
+  ? {...r, strike_pct: sdrNum(r.strike_pct)/100} : r;
+
+// rows: NEWT prints, already venue-filtered (the pricer filters venue in SQL, before pairing).
+// Returns [{kind, rr, legs, row, ccy, opt, swp, tsMs, tsStr, notional, pStrike, rStrike,
+//           pPrem, rPrem, prem, premBp, pBp, rBp, netBp, deduped, mic, exotic}]
+function pairSdrTrades(rowsIn) {
+  const rows = (rowsIn||[]).map(sdrNormRow);
+  const otOf = (r) => SDR_OT_NORM[String(r.option_type_decoded==null?"":r.option_type_decoded).trim().toUpperCase()];
+  const payers = [], rcvrs = [];
+  rows.forEach((r,i) => { const o = otOf(r); if (o==="CALL") payers.push(i); else if (o==="PUT") rcvrs.push(i); });
+  const matchedP = new Set(), matchedR = new Set(), out = [];
+  if (payers.length && rcvrs.length) {
+    // Payers with a same-strike receiver (2dp) match FIRST so an R/R payer can't steal a straddle leg
+    const rk = new Set(rcvrs.filter(i=>rows[i].strike_pct!=null && rows[i].strike_pct!=="").map(i => Math.round(sdrNum(rows[i].strike_pct)*100)/100));
+    const hasSame = (i) => (rows[i].strike_pct!=null && rows[i].strike_pct!=="" && rk.has(Math.round(sdrNum(rows[i].strike_pct)*100)/100)) ? 1 : 0;
+    payers.sort((a,b) => hasSame(b) - hasSame(a));          // stable: keeps original order within groups
+    const buckets = {};
+    rcvrs.forEach(i => { const r = rows[i];
+      const k = [String(r.opt_tenor==null?"":r.opt_tenor).trim(), String(r.notional_ccy==null?"":r.notional_ccy), sdrTen(r.swp_tenor)].join("|");
+      (buckets[k] = buckets[k] || []).push(i); });
+    for (const pi of payers) {
+      const p = rows[pi];
+      const sP = sdrNum(p.strike_pct), tP = sdrTen(p.swp_tenor), eP = String(p.opt_tenor==null?"":p.opt_tenor).trim();
+      const ccyP = String(p.notional_ccy==null?"":p.notional_ccy), timeP = sdrTsMs(p), nP = sdrNum(p.notional_leg1);
+      if (!(nP > 0)) continue;                                // pricer: no payer notional => no candidates
+      let cands = (buckets[[eP, ccyP, tP].join("|")] || []).filter(ri => !matchedR.has(ri)
+        && Math.abs(sdrNum(rows[ri].notional_leg1) - nP) <= 0.03*nP);   // 3% notional tolerance
+      if (!cands.length) continue;
+      const key = (ri) => { const r = rows[ri];
+        const sk = (r.strike_pct==null || r.strike_pct==="" || !isFinite(parseFloat(r.strike_pct))) ? 1e18 : parseFloat(r.strike_pct);
+        const gap = Math.abs(sk - sP), tr = sdrTsMs(r);
+        return [gap < 0.01 ? 0 : 1, gap, (isFinite(tr) && isFinite(timeP)) ? Math.abs(timeP - tr) : 9e12]; };
+      cands = cands.map(ri => ({ri, k:key(ri)})).sort((a,b) => (a.k[0]-b.k[0]) || (a.k[1]-b.k[1]) || (a.k[2]-b.k[2]));
+      for (const {ri} of cands) {
+        const r = rows[ri], timeR = sdrTsMs(r);
+        if (!isFinite(timeR) || !isFinite(timeP) || Math.abs(timeP - timeR) > 600000) continue;   // 10-min window
+        matchedP.add(pi); matchedR.add(ri);
+        const sR = sdrNum(r.strike_pct);
+        let pPrem = sdrNum(p.premium_amount), rPrem = sdrNum(r.premium_amount);
+        const same = Math.abs(sP - sR) < 0.01, hasSwp = !!tP;
+        const mic = String(p.platform_identifier||"");
+        const deduped = same && SDR_PREM_DEDUP_MICS.has(mic) && pPrem > 0 && rPrem > 0;
+        let prem;
+        if (deduped) { prem = Math.max(pPrem, rPrem); pPrem = prem/2; rPrem = prem/2; }   // full prem on each leg
+        else prem = pPrem + rPrem;
+        const n = nP;
+        const netPrem = Math.abs(pPrem - rPrem);
+        let kind, rr = false;
+        if (same && hasSwp) kind = "Straddle";
+        else if (!same && hasSwp) { kind = "Strangle"; rr = prem > 0 && (netPrem/prem) < 0.30; }
+        else if (same && !hasSwp) kind = "C/F Straddle";
+        else { kind = "Collar"; prem = pPrem - rPrem; }                                      // net: buy - sell
+        const bp = (x) => n > 0 ? Math.round(x/n*1e6)/100 : 0;
+        out.push({kind, rr, legs:[p, r], row:p, ccy:ccyP, opt:eP, swp:tP, tsMs:timeP, tsStr:sdrTsStr(p), notional:n,
+          pStrike:sP, rStrike:sR, pPrem, rPrem, prem, premBp:bp(prem), pBp:bp(pPrem), rBp:bp(rPrem),
+          netBp: n > 0 ? Math.round(netPrem/n*1e8)/1e4 : 0, deduped, mic, exotic:false});
+        break;
+      }
+    }
+  }
+  // ── Singles (unmatched). Tradition/Tradeweb STR leg prints merged first ──
+  const refBps = {}, groups = {};
+  rows.forEach((r,i) => {
+    if (matchedP.has(i) || matchedR.has(i)) return;
+    if (String(r.option_type_decoded==null?"":r.option_type_decoded).toUpperCase() !== "STR") return;
+    const mic = String(r.platform_identifier||""), n = sdrNum(r.notional_leg1), pr = sdrNum(r.premium_amount);
+    if (!SDR_TRAD_MICS.has(mic)) {
+      if (n > 0 && pr > 0) { const k = `${r.opt_tenor}|${r.swp_tenor}`; (refBps[k] = refBps[k] || []).push(pr/n*1e4); }
+      return;
+    }
+    const gk = [sdrTsStr(r), Math.round(sdrNum(r.strike_pct)*1e5)/1e5, r.opt_tenor, r.swp_tenor, n, mic].join("|");
+    (groups[gk] = groups[gk] || []).push(i);
+  });
+  const legSkip = new Set(), legPair = {};
+  Object.values(groups).forEach(ids => { ids.sort((a,b)=>a-b);
+    for (let j=0; j+1<ids.length; j+=2) { legSkip.add(ids[j+1]); legPair[ids[j]] = ids[j+1]; } });
+  rows.forEach((r,i) => {
+    if (matchedP.has(i) || matchedR.has(i) || legSkip.has(i)) return;
+    const otRaw = String(r.option_type_decoded==null?"":r.option_type_decoded).toUpperCase();
+    const exotic = SDR_EXO_TYPES.has(otRaw);
+    let prem = sdrNum(r.premium_amount); const n = sdrNum(r.notional_leg1);
+    let legs = [r], pBp = null, rBp = null;
+    if (legPair[i] != null) {
+      const r2 = rows[legPair[i]], l1 = prem, l2 = sdrNum(r2.premium_amount), summed = l1 + l2;
+      legs = [r, r2];
+      const refs = (refBps[`${r.opt_tenor}|${r.swp_tenor}`] || []).slice().sort((a,b)=>a-b);
+      const med = refs.length ? refs[Math.floor(refs.length/2)] : 0;
+      if (refs.length && n > 0 && med > 0 && (summed/n*1e4) > 1.5*med) prem = Math.max(l1, l2);  // double-report
+      else { prem = summed; if (n > 0) { pBp = Math.round(l1/n*1e6)/100; rBp = Math.round(l2/n*1e6)/100; } }
+    }
+    const ot = SDR_OT_NORM[otRaw.trim()] || otRaw;
+    const swp = sdrTen(r.swp_tenor);
+    const SDR_RAW_LABELS = {STRG:"Strangle",EC:"Euro Swn",BCALL:"Berm Payer",NSTD:"Non-std",XCS:"XCCY Swn",OTH:"Other"};
+    let kind = ot==="CALL" ? "Payer" : ot==="PUT" ? "Receiver" : otRaw==="STR" ? "Straddle" : (SDR_RAW_LABELS[otRaw] || r.option_type_decoded || "Other");
+    if (!swp && r.opt_tenor) { if (ot==="CALL") kind = "Cap"; else if (ot==="PUT") kind = "Floor"; }
+    const sK = sdrNum(r.strike_pct);
+    out.push({kind, rr:false, legs, row:r, ccy:String(r.notional_ccy||""), opt:String(r.opt_tenor==null?"":r.opt_tenor).trim(), swp,
+      tsMs:sdrTsMs(r), tsStr:sdrTsStr(r), notional:n, pStrike:(r.strike_pct==null||r.strike_pct==="")?null:sK, rStrike:null,
+      pPrem:prem, rPrem:0, prem, premBp: n > 0 ? Math.round(prem/n*1e6)/100 : 0, pBp, rBp, netBp:0,
+      deduped:false, mic:String(r.platform_identifier||""), exotic});
+  });
+  return out;
+}
+const sdrKindLabel = (t) => t.kind + (t.rr ? " (R/R?)" : "");
+
 function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatform, tradingDayStartMs, tradingDayEndMs) {
   const flash = {};
   const actF = Array.isArray(sdrFilterAction)  ? sdrFilterAction  : [];
   const typF = Array.isArray(sdrFilterType)    ? sdrFilterType    : [];
   const venF = Array.isArray(sdrFilterPlatform)? sdrFilterPlatform: [];
-  // Type label mapping: CALL=Payer, PUT=Receiver, STR=Straddle
-        const typeLabel = t => ({CALL:"Payer",PUT:"Receiver",STR:"Straddle",STRG:"Strangle",EC:"Euro Swn",BCALL:"Berm Payer",OTH:"Other"}[t]||t||"");
 
-        // Straddle detection: pair CALL+PUT with same tenor/strike within 2 mins
-        const newt = sdrData.filter(r => r.action_type==="NEWT");
-        const payers = newt.filter(r => r.option_type_decoded==="CALL");
-        const rcvrs  = newt.filter(r => r.option_type_decoded==="PUT");
-        const pairedRcvrIds = new Set();
-        const straddles = [];
-        payers.forEach(p => {
-          const sp = Math.round(parseFloat(p.strike_pct||0)*100)/100;
-          const tp = new Date(p.event_timestamp).getTime();
-          // First try straddle (same strike)
-          let match = rcvrs.find(r => {
-            if (pairedRcvrIds.has(r.dissemination_id)) return false;
-            if (r.swp_tenor !== p.swp_tenor || r.opt_tenor !== p.opt_tenor) return false;
-            if (Math.abs(Math.round(parseFloat(r.strike_pct||0)*100)/100 - sp) > 0.01) return false;
-            return Math.abs(new Date(r.event_timestamp).getTime() - tp) <= 120000;
-          });
-          if (match) {
-            pairedRcvrIds.add(match.dissemination_id);
-            straddles.push({...p, _paired:true, option_type_decoded:"STR", _label:"Straddle",
-              _rcvrPrem: parseFloat(match.premium_amount||0), _rcvrStrike: match.strike_pct});
-            return;
-          }
-          // Then try strangle (different strike, same expiry/tenor, within 2 mins)
-          match = rcvrs.find(r => {
-            if (pairedRcvrIds.has(r.dissemination_id)) return false;
-            if (r.swp_tenor !== p.swp_tenor || r.opt_tenor !== p.opt_tenor) return false;
-            return Math.abs(new Date(r.event_timestamp).getTime() - tp) <= 120000;
-          });
-          if (match) {
-            pairedRcvrIds.add(match.dissemination_id);
-            straddles.push({...p, _paired:true, option_type_decoded:"STRG", _label:"Strangle",
-              _rcvrPrem: parseFloat(match.premium_amount||0), _rcvrStrike: match.strike_pct});
-          }
-        });
-
-        // Build flash map — NEWT only, classified (following pricer Full Trade Analytics)
-        const pairedPayerIds = new Set(straddles.map(s=>s.dissemination_id));
-        // Tradition (TSEF family) reports a straddle as TWO 'STR' leg prints — same ts/
-        // strike/tenor/notional, each at HALF premium. Merge pairs so cells show ONE
-        // straddle at the summed (full) premium — same logic as the pricer tape.
-        // All other venues' STR prints untouched.
-        const TRAD_MICS = new Set(["TSEF","TSIR","TSAF","TCDS","TREU","TEUR","TEIR","TSIG"]);
-        const others0 = newt.filter(r => !["CALL","PUT"].includes(r.option_type_decoded));
-        const tradGroups = {};
-        others0.forEach((r,i) => {
-          if (String(r.option_type_decoded).toUpperCase()!=="STR" || !TRAD_MICS.has(r.platform_identifier)) return;
-          const k = [r.event_timestamp, r.strike_pct, r.opt_tenor, r.swp_tenor, r.notional_leg1, r.platform_identifier].join("|");
-          (tradGroups[k] = tradGroups[k] || []).push(i);
-        });
-        const tradSkip = new Set(); const tradAdd = {};
-        Object.values(tradGroups).forEach(ids => {
-          for (let j=0; j+1<ids.length; j+=2) { tradSkip.add(ids[j+1]); tradAdd[ids[j]] = ids[j+1]; }
-        });
-        const others = others0.map((r,i) => {
-          if (tradSkip.has(i)) return null;
-          if (tradAdd[i] != null) {
-            const l2 = others0[tradAdd[i]];
-            return {...r, premium_amount: (parseFloat(r.premium_amount||0) + parseFloat(l2.premium_amount||0))};
-          }
-          return r;
-        }).filter(Boolean);
-        const allTrades = [
-          ...straddles,
-          ...payers.filter(r => !pairedPayerIds.has(r.dissemination_id)),
-          ...rcvrs.filter(r => !pairedRcvrIds.has(r.dissemination_id)),
-          ...others,
-        ]
-          .filter(r=>typF.length===0||typF.includes(typeLabel(r.option_type_decoded)))
-          .filter(r=>venF.length===0||venF.includes(venueName(r.platform_identifier)));
-
-        allTrades.forEach(r => {
-          const expKey = sdrExpToKey(r.opt_tenor);
-          const tenKey = sdrTenToKey(r.swp_tenor);
+        // Pairing = pairSdrTrades (pricer Full Trade Analytics). Venue filter applied BEFORE
+        // pairing, exactly as the pricer filters platform in its SQL.
+        const newt = sdrData.filter(r => r.action_type==="NEWT")
+          .filter(r => venF.length===0 || venF.includes(venueName(r.platform_identifier)));
+        const trades = pairSdrTrades(newt)
+          .filter(t => typF.length===0 || typF.includes(t.kind));
+        trades.forEach(t => {
+          const expKey = sdrExpToKey(t.opt);
+          const tenKey = sdrTenToKey(t.swp);
           if (!expKey || !tenKey) return;
+          const ts = t.tsMs;
+          if (!(ts >= tradingDayStartMs && ts <= tradingDayEndMs)) return; // only 7am-6pm trading day
           const k = `${expKey}|${tenKey}`;
-          const ts = new Date(r.event_timestamp).getTime();
-          if (ts < tradingDayStartMs || ts > tradingDayEndMs) return; // only 7am-6pm trading day
-            const notl = parseFloat(r.notional_leg1||0);
-            const payPrem = parseFloat(r.premium_amount||0);
-            const isPaired = !!r._paired;
-            const isDW = r.platform_identifier === "DWSF";
-            let nettBp;
-            if (isPaired && isDW) {
-              // Dealerweb: each leg carries half prem, sum for nett
-              const rcvPrem = parseFloat(r._rcvrPrem||0);
-              nettBp = notl>0 ? Math.round((payPrem+rcvPrem)/notl*1e6)/100 : 0;
-            } else {
-              // All others (paired or single): payer prem = full premium
-              nettBp = notl>0 ? Math.round(payPrem/notl*1e6)/100 : 0;
-            }
-            const strikeAdj = isDW ? 100 : 1;
-            const entry = { notional: r.notional_leg1, rate: r.strike_pct ? r.strike_pct/strikeAdj : r.strike_pct,
-              rcvrStrike: r._rcvrStrike ? r._rcvrStrike/strikeAdj : null,
-              nettBp, venue: r.platform_identifier,
-              type: typeLabel(r.option_type_decoded), ts };
-            if (!flash[k]) flash[k] = [];
-            flash[k].push(entry);
+          const entry = { notional: t.notional, rate: t.pStrike,
+            rcvrStrike: (t.kind==="Strangle") ? t.rStrike : null,
+            nettBp: t.premBp, pBp: t.pBp, rBp: t.rBp,
+            legBp: t.rr ? t.netBp : null, rr: t.rr, deduped: t.deduped,
+            venue: t.mic, type: sdrKindLabel(t), ts };
+          if (!flash[k]) flash[k] = [];
+          flash[k].push(entry);
         });
         // Sort each cell's trades newest-first
         Object.values(flash).forEach(arr => arr.sort((a,b) => b.ts - a.ts));
@@ -2684,7 +2728,7 @@ function SdrTapePanel({ mainCcy }) {
     try {
       const from = new Date(Date.now() - 5*864e5).toISOString().slice(0,10);
       const base = {
-        select: "dissemination_id,event_timestamp,trade_date,notional_leg1,premium_amount,strike_pct,opt_tenor,swp_tenor,notional_ccy,option_type_decoded,platform_identifier,action_type",
+        select: "dissemination_id,event_timestamp,execution_timestamp,trade_date,notional_leg1,premium_amount,strike_pct,opt_tenor,swp_tenor,notional_ccy,option_type_decoded,platform_identifier,action_type",
         action_type: "eq.NEWT",
         trade_date: `gte.${from}`,
         order: "event_timestamp.desc",
@@ -2728,54 +2772,17 @@ function SdrTapePanel({ mainCcy }) {
       const hasP = parseFloat(r.premium_amount||0) > 0;
       return hasK || hasP;
     });
-    // Tradition reports a straddle as TWO 'STR' leg prints at HALF premium each —
-    // merge pairs (same ts/strike/tenors/notional/MIC) into one full-premium straddle.
-    const TRAD = new Set(["TSEF","TSIR","TSAF","TCDS","TREU","TEUR","TEIR","TSIG"]);
-    const _grp = {};
-    base.forEach((r,i) => {
-      if (String(r.option_type_decoded).toUpperCase()!=="STR" || !TRAD.has(r.platform_identifier)) return;
-      const k=[r.event_timestamp,r.strike_pct,r.opt_tenor,r.swp_tenor,r.notional_leg1,r.platform_identifier].join("|");
-      (_grp[k]=_grp[k]||[]).push(i);
-    });
-    const _skip=new Set(), _fold={};
-    Object.values(_grp).forEach(ids=>{ for(let j=0;j+1<ids.length;j+=2){ _skip.add(ids[j+1]); _fold[ids[j]]=ids[j+1]; } });
-    base = base.map((r,i)=>{
-      if (_skip.has(i)) return null;
-      if (_fold[i]!=null){ const l2=base[_fold[i]]; return {...r, premium_amount:(parseFloat(r.premium_amount||0)+parseFloat(l2.premium_amount||0))}; }
-      return r;
-    }).filter(Boolean);
-    const payers = base.filter(r => r.option_type_decoded === "CALL");
-    const rcvrs  = base.filter(r => r.option_type_decoded === "PUT");
-    const pairedR = new Set(), pairedP = new Set();
-    const out = [];
-    payers.forEach(p => {
-      const sp = Math.round(parseFloat(p.strike_pct||0)*100)/100, tp = new Date(p.event_timestamp).getTime();
-      let m = rcvrs.find(r => !pairedR.has(r.dissemination_id) && r.swp_tenor===p.swp_tenor && r.opt_tenor===p.opt_tenor && Math.abs(Math.round(parseFloat(r.strike_pct||0)*100)/100 - sp)<=0.01 && Math.abs(new Date(r.event_timestamp).getTime()-tp)<=120000);
-      let typ = "Straddle";
-      if (!m) { m = rcvrs.find(r => !pairedR.has(r.dissemination_id) && r.swp_tenor===p.swp_tenor && r.opt_tenor===p.opt_tenor && Math.abs(new Date(r.event_timestamp).getTime()-tp)<=120000); typ = "Strangle"; }
-      if (m) { pairedR.add(m.dissemination_id); pairedP.add(p.dissemination_id);
-        // Paired premium — IDENTICAL logic to the pricer's pairing:
-        // same-strike pair on a dedup MIC => both legs carry the FULL straddle
-        // premium (double-reported) => combined = max(leg); otherwise sum.
-        // Strangles/RRs (different strikes) always sum — deduping corrupts them.
-        const PREM_DEDUP_MICS = new Set(["BGCD","BGCO","BGCI","TPSE","TPIR","TPEU","TSEF","TSIR","TSAF","TWSF","TWEM","UTSL","UTST","TSIG","IGDL","ISWE","ISWV","IOIR","IMRD","GSEF","GFSO","BILT","XXXX"]);
-        const _pp = parseFloat(p.premium_amount||0), _rp = parseFloat(m.premium_amount||0);
-        const _sameK = Math.abs(parseFloat(p.strike_pct||0) - parseFloat(m.strike_pct||0)) < 0.01;
-        const _dedup = _sameK && PREM_DEDUP_MICS.has(String(p.platform_identifier||"")) && _pp>0 && _rp>0;
-        const _comb = _dedup ? Math.max(_pp,_rp) : (_pp+_rp);
-        out.push({...p, _type:typ, _prem:_comb||null, _strike2:m.strike_pct}); }
-    });
-    base.forEach(r => {
-      if (pairedR.has(r.dissemination_id) || pairedP.has(r.dissemination_id)) return;
-      let typ;
-      if (!r.swp_tenor || String(r.swp_tenor).trim()==="") typ = r.option_type_decoded==="PUT" ? "Floor" : "Cap";
-      else typ = r.option_type_decoded==="CALL" ? "Payer" : r.option_type_decoded==="PUT" ? "Receiver" : (String(r.option_type_decoded||"").toUpperCase()==="STR" ? "Straddle" : (r.option_type_decoded||"—"));
-      out.push({...r, _type:typ, _prem:parseFloat(r.premium_amount||0)||null});
-    });
+    // Pairing = pairSdrTrades (pricer Full Trade Analytics) — same function as the cells/toasts.
+    // Venue filter applied BEFORE pairing, as the pricer does in SQL.
+    if (venF.length) base = base.filter(r => venF.includes(venueName(r.platform_identifier)));
+    const out = pairSdrTrades(base).map(t => ({
+      ...t.row, strike_pct: t.pStrike, _type: t.kind, _label: sdrKindLabel(t), _rr: t.rr,
+      _prem: t.prem || null, _premBp: t.premBp, _pBp: t.pBp, _rBp: t.rBp, _legBp: t.rr ? t.netBp : null,
+      _strike2: t.legs.length===2 && t.rStrike!=null && (t.kind==="Strangle"||t.kind==="Collar") ? t.rStrike : null,
+      event_timestamp: t.row.execution_timestamp || t.row.event_timestamp,
+    }));
     out.sort((a,b)=> new Date(b.event_timestamp) - new Date(a.event_timestamp));
-    let out2 = typeF==="ALL" ? out : out.filter(r => r._type===typeF);
-    if (venF.length) out2 = out2.filter(r => venF.includes(venueName(r.platform_identifier)));
-    return out2;
+    return typeF==="ALL" ? out : out.filter(r => r._type===typeF);
   }, [allRows, sessionDate, ccyF, typeF, venMap]);
   // EXACTLY the main window's VENUE selector list — same names, same order.
   // No data-derived extras (they leaked dealer noise like HSBC/ICE/RTX/Tradeweb).
@@ -2784,7 +2791,7 @@ function SdrTapePanel({ mainCcy }) {
   const fmtT = (ts)=>{ try { return new Intl.DateTimeFormat("en-GB",{timeZone:TZ,hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}).format(new Date(ts)); } catch { return ""; } };
   const fmtDate = (d)=>{ if(!d) return "—"; try { return new Intl.DateTimeFormat("en-GB",{timeZone:TZ,weekday:"short",day:"2-digit",month:"short"}).format(new Date(d+"T12:00:00Z")); } catch { return d; } };
   const fmtN = (n)=> (n==null||n==="") ? "—" : (Math.abs(+n)>=1e9 ? `${(+n/1e9).toFixed(2)}B` : Math.abs(+n)>=1e6 ? `${(+n/1e6).toFixed(0)}M` : `${Math.round(+n)}`);
-  const tCol = (t)=>({Payer:"#00c040",Receiver:"#ff8c00",Straddle:"#c080f0",Strangle:"#e0a040",Cap:"#40b0e0",Floor:"#e07040"}[t]||"#90a8c0");
+  const tCol = (t)=>({Payer:"#00c040",Receiver:"#ff8c00",Straddle:"#c080f0",Strangle:"#e0a040",Cap:"#40b0e0",Floor:"#e07040","C/F Straddle":"#b08050",Collar:"#a060c0"}[t]||"#90a8c0");
   const cCol = (c)=>({USD:"#5a9fd4",EUR:"#d4af5a",GBP:"#5ecb8a",JPY:"#e0709a"}[c]||"#90a8c0");
 
   const chip = (on)=>({fontSize:8,padding:"2px 7px",borderRadius:3,cursor:"pointer",fontFamily:"inherit",fontWeight:700,letterSpacing:".05em",
@@ -2792,7 +2799,7 @@ function SdrTapePanel({ mainCcy }) {
   const th = {position:"sticky",top:0,background:"#0a1018",color:"#5a7a98",fontSize:8,fontWeight:700,letterSpacing:".08em",padding:"5px 8px",textAlign:"left",borderBottom:"1px solid #1e3450",zIndex:1};
   const td = {padding:"3px 8px",fontSize:10,borderBottom:"1px solid #0e1722",whiteSpace:"nowrap"};
 
-  const TYPES = ["ALL","Payer","Receiver","Straddle","Strangle","Cap","Floor"];
+  const TYPES = ["ALL","Payer","Receiver","Straddle","Strangle","C/F Straddle","Collar","Cap","Floor"];
 
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minHeight:0}}>
@@ -2829,14 +2836,14 @@ function SdrTapePanel({ mainCcy }) {
               <tr key={r.dissemination_id||i} style={{background:i%2?"rgba(15,25,40,.3)":"transparent"}}>
                 <td style={{...td,color:"#6a8aa8"}}>{fmtT(r.event_timestamp)}</td>
                 <td style={{...td,color:cCol(r.notional_ccy),fontWeight:700}}>{r.notional_ccy}</td>
-                <td style={{...td,color:tCol(r._type),fontWeight:700}}>{r._type}</td>
+                <td style={{...td,color:tCol(r._type),fontWeight:700}}>{r._label||r._type}</td>
                 <td style={{...td,color:"#b0bcc8"}}>{r.opt_tenor||"—"}</td>
                 <td style={{...td,color:"#b0bcc8"}}>{r.swp_tenor||"—"}</td>
                 <td style={{...td,textAlign:"right",color:"#90a8c0"}}>{r.strike_pct!=null?Number(r.strike_pct).toFixed(3):"—"}{r._strike2!=null?` / ${Number(r._strike2).toFixed(3)}`:""}</td>
                 <td style={{...td,textAlign:"right",color:"#c8d4e0",fontWeight:700}}>{fmtN(r.notional_leg1)}</td>
                 <td style={{...td,textAlign:"right",color:"#90a8c0"}}>{(()=>{
                   const nt=parseFloat(r.notional_leg1||0);
-                  if(r._prem&&nt>0) return (r._prem/nt*1e4).toFixed(1);
+                  if(r._prem&&nt>0) return r._premBp.toFixed(1)+(r._legBp!=null?` · leg ${r._legBp.toFixed(1)}`:"");
                   return r._prem?fmtN(r._prem):"\u2014";
                 })()}</td>
                 <td style={{...td,color:bkc(venueName(r.platform_identifier))}}>{venueName(r.platform_identifier)}</td>
@@ -3182,6 +3189,8 @@ export default function App() {
       const rows = [
         ['Notional', s.notional ? (+s.notional/1e6).toFixed(0)+'M' : '—'],
         ['Nett Prem', s.nettBp != null ? s.nettBp.toFixed(1)+' bp' : '—'],
+        ...(s.pBp != null && s.rBp != null ? [['P / R', s.pBp.toFixed(1)+' / '+s.rBp.toFixed(1)+' bp'+(s.deduped?' (dedup)':'')]] : []),
+        ...(s.legBp != null ? [['Nett Leg (R/R)', s.legBp.toFixed(1)+' bp']] : []),
         ['Strike', s.rate ? (+s.rate).toFixed(3)+'%' : '—'],
         ...(s.rcvrStrike ? [['R Strike', (+s.rcvrStrike).toFixed(3)+'%']] : []),
         ['Venue', PN[s.venue]||s.venue||'—'],
@@ -3239,7 +3248,7 @@ export default function App() {
         const dateFrom = new Date(today.getTime() - 1*24*60*60*1000).toISOString().slice(0,10);
         // Paginate to overcome Supabase 1000 row limit
         const sdrParams = {
-          select: "dissemination_id,event_timestamp,notional_leg1,premium_amount,strike_pct,opt_tenor,swp_tenor,notional_ccy,option_type_decoded,platform_identifier,action_type",
+          select: "dissemination_id,event_timestamp,execution_timestamp,notional_leg1,premium_amount,strike_pct,opt_tenor,swp_tenor,notional_ccy,option_type_decoded,platform_identifier,action_type",
           trade_date: `gte.${dateFrom}`,
           notional_ccy: `eq.${activeCcy}`,
           opt_tenor: "not.is.null",
@@ -3300,17 +3309,10 @@ export default function App() {
     let stop=false;
     const _fmtN=(n)=> n==null?"":(n>=1e9?`${(n/1e9).toFixed(2)}B`:n>=1e6?`${(n/1e6).toFixed(0)}M`:`${Math.round(n)}`);
     const pendingLegs = { current: [] };   // unpaired CALL/PUT legs held ONE tick for a mate
-    const _fmtAlert=(r)=>{
-      const tn=[r.opt_tenor,r.swp_tenor].filter(Boolean).join("\u00d7");
-      const prem=r.premium_amount!=null?`  Prem ${_fmtN(r.premium_amount)}`:"";
-      const k=r.strike_pct!=null?`  K ${Number(r.strike_pct).toFixed(3)}`:"";
-      const v=r.platform_identifier?`  [${r.platform_identifier}]`:"";
-      return `\ud83d\udd14 ${r.notional_ccy} ${tn} ${r.option_type_decoded||""}  N ${_fmtN(r.notional_leg1)}${prem}${k}${v}`;
-    };
     const pollAlerts=async()=>{
       try{
         const rows=await sbFetch("dtcc_sdr",{
-          select:"dissemination_id,event_timestamp,notional_leg1,notional_ccy,premium_amount,strike_pct,opt_tenor,swp_tenor,option_type_decoded,platform_identifier,action_type",
+          select:"dissemination_id,event_timestamp,execution_timestamp,notional_leg1,notional_ccy,premium_amount,strike_pct,opt_tenor,swp_tenor,option_type_decoded,platform_identifier,action_type",
           notional_ccy:`eq.${ccy}`,
           action_type:"eq.NEWT",
           order:"event_timestamp.desc",
@@ -3358,59 +3360,26 @@ export default function App() {
           if((Number(r.notional_leg1)||0) < minNot) continue;
           _elig.push(r);
         }
-        // Pair CALL+PUT legs into structures — SAME rules as the tape pairing:
-        // match ccy + expiry + tenor + notional within 180s; same strike => STRADDLE
-        // with premium deduped per the venue set (max leg) else summed; different
-        // strikes => R/R with both strikes shown. Unpaired legs are HELD one tick
-        // so a mate disseminating in the next batch still pairs; then toast single.
-        // Pairing criteria IDENTICAL to the pricer (app_streamlit pairing block):
-        //   match  : same expiry + same ccy + same swp_tenor (or both empty),
-        //            receiver notional within 1% of payer's, within 600s
-        //   choose : ranked — exact same-strike first (straddle partner), then
-        //            nearest strike, then closest in time; each leg consumed once
-        const _isCP=(r)=>["CALL","PUT"].includes(String(r.option_type_decoded||"").toUpperCase());
-        const _pool=[...pendingLegs.current.map(x=>x.row), ..._elig.filter(_isCP)];
-        const _nonCP=_elig.filter(r=>!_isCP(r));
-        const _calls=_pool.filter(r=>String(r.option_type_decoded).toUpperCase()==="CALL");
-        const _puts =_pool.filter(r=>String(r.option_type_decoded).toUpperCase()==="PUT");
-        const _usedPut=new Set(); const _usedCallIds=new Set(); const _pairs=[];
-        const _emptyT=(t)=>!t||["\u2014","NA","None",""].includes(String(t));
-        for(const c of _calls){
-          const cK=parseFloat(c.strike_pct||0), cN=parseFloat(c.notional_leg1||0), cT=new Date(c.event_timestamp);
-          const cands=_puts.map((r,ix)=>({r,ix}))
-            .filter(({r,ix})=>!_usedPut.has(ix)
-              && r.notional_ccy===c.notional_ccy
-              && String(r.opt_tenor||"")===String(c.opt_tenor||"")
-              && (_emptyT(c.swp_tenor) ? _emptyT(r.swp_tenor) : String(r.swp_tenor||"")===String(c.swp_tenor||""))
-              && Math.abs(parseFloat(r.notional_leg1||0)-cN)<=0.01*cN
-              && Math.abs(new Date(r.event_timestamp)-cT)<=600000)
-            .map(x=>{const rK=parseFloat(x.r.strike_pct||0);
-              return {...x, same:Math.abs(rK-cK)<0.01?1:0, gap:Math.abs(rK-cK),
-                      tsec:Math.abs(new Date(x.r.event_timestamp)-cT)};})
-            .sort((a,b)=> (b.same-a.same) || (a.gap-b.gap) || (a.tsec-b.tsec));
-          if(cands.length){ _usedPut.add(cands[0].ix); _usedCallIds.add(c.dissemination_id); _pairs.push([c,cands[0].r]); }
-        }
-        const _used=null; // (superseded by _usedPut/_usedCallIds)
-        const PREM_DEDUP_MICS=new Set(["BGCD","BGCO","BGCI","TPSE","TPIR","TPEU","TSEF","TSIR","TSAF","TWSF","TWEM","UTSL","UTST","TSIG","IGDL","ISWE","ISWV","IOIR","IMRD","GSEF","GFSO","BILT","XXXX"]);
+        // Pairing = pairSdrTrades (pricer Full Trade Analytics) — same function as cells/tape.
+        // Unpaired CALL/PUT legs are HELD one tick so a mate disseminating in the next
+        // batch still pairs; if still single next tick, toast as a single leg.
+        const _isCP=(r)=>!!SDR_OT_NORM[String(r.option_type_decoded||"").trim().toUpperCase()];
+        const _heldIds=new Set(pendingLegs.current.map(x=>_sdrKeyOf(x.row)));
+        const _pool=[...pendingLegs.current.map(x=>x.row), ..._elig];
         let _fired=0;
         const _toast=(m)=>{ if(_fired<10){ addToast(m,"sdr",true); _fired++; } };
-        for(const [c,pu] of _pairs){
-          const pp=parseFloat(c.premium_amount||0), rp=parseFloat(pu.premium_amount||0);
-          const sameK=Math.abs(parseFloat(c.strike_pct||0)-parseFloat(pu.strike_pct||0))<0.01;
-          const comb=(sameK && PREM_DEDUP_MICS.has(String(c.platform_identifier||"")) && pp>0 && rp>0)?Math.max(pp,rp):(pp+rp);
-          const merged={...c, option_type_decoded: sameK?"STRADDLE":"R/R", premium_amount: comb||null};
-          _toast(_fmtAlert(merged)+(sameK?"":`  K2 ${Number(pu.strike_pct||0).toFixed(3)}`));
-        }
-        for(const r of _nonCP) _toast(_fmtAlert(r));     // STR/caps/floors straight through
-        const _pairedPutIds=new Set(_pairs.map(([,r])=>r.dissemination_id));
+        const _fmtTrade=(t)=>{
+          const tn=[t.opt,t.swp].filter(Boolean).join("\u00d7");
+          const k2=(t.rStrike!=null && (t.kind==="Strangle"||t.kind==="Collar")) ? ` / ${Number(t.rStrike).toFixed(3)}` : "";
+          const k=t.pStrike!=null?`  K ${Number(t.pStrike).toFixed(3)}${k2}`:"";
+          const bp=t.notional>0 && t.prem ? `  ${t.premBp.toFixed(1)}bp${t.rr?` (leg ${t.netBp.toFixed(1)})`:""}` : "";
+          return `\ud83d\udd14 ${t.ccy} ${tn} ${sdrKindLabel(t)}  N ${_fmtN(t.notional)}${bp}${k}  [${venueName(t.mic)||t.mic}]`;
+        };
         const _next=[];
-        for(const r of _pool){
-          const t=String(r.option_type_decoded).toUpperCase();
-          if(t==="CALL" && _usedCallIds.has(r.dissemination_id)) continue;
-          if(t==="PUT"  && _pairedPutIds.has(r.dissemination_id)) continue;
-          const wasHeld=pendingLegs.current.some(x=>x.row.dissemination_id===r.dissemination_id);
-          if(wasHeld) _toast(_fmtAlert(r));              // waited a tick, no mate — genuine single leg
-          else _next.push({row:r});                      // hold one tick for a late mate
+        for(const t of pairSdrTrades(_pool)){
+          const single = t.legs.length===1 && _isCP(t.row);
+          if(single && !_heldIds.has(_sdrKeyOf(t.row))){ _next.push({row:t.row}); continue; }  // hold one tick for a late mate
+          _toast(_fmtTrade(t));
         }
         pendingLegs.current=_next;
       }catch(e){ console.warn("[SDR alert]",e); }
@@ -3867,7 +3836,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v1709b</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v1709c</span>
       </div>
 
       {/* HEADER */}
