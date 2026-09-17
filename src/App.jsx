@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 1709c
+// RateEdge vol-blotter 1709e
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -3836,7 +3836,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v1709c</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v1709e</span>
       </div>
 
       {/* HEADER */}
@@ -4224,6 +4224,7 @@ export default function App() {
           <div style={{flex:1,overflow:"auto",padding:"6px 8px"}}>
             {(()=>{
               const iS={background:"#060a10",border:"1px solid #2a3860",color:"#b0bcc8",fontSize:8,borderRadius:2,padding:"2px 3px",fontFamily:"inherit",outline:"none"};
+              const gS={minWidth:0,width:"100%",boxSizing:"border-box"};  // grid cells: shrink to column, no overflow
               const ALL_EXP=["1w","1m","2m","3m","6m","9m","1y","18m","2y","3y","4y","5y","6y","7y","8y","9y","10y","12y","15y","20y","25y","30y"];
               const ALL_TEN=["1Y","2Y","3Y","4Y","5Y","7Y","10Y","12Y","15Y","20Y","25Y","30Y"];
               const upd=(i,f,v)=>setSpreadLegs(p=>p.map((l,j)=>j===i?{...l,[f]:v}:l));
@@ -4268,22 +4269,22 @@ export default function App() {
 
                 {/* Leg 0 — BID leg (locked) */}
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 42px 26px 1fr 34px",gap:2,alignItems:"center",marginBottom:2}}>
-                  <select value={spreadLegs[0]?.exp} onChange={e=>upd(0,"exp",e.target.value)} style={{...iS}}>{ALL_EXP.map(e=><option key={e} value={e}>{e.toUpperCase()}</option>)}</select>
-                  <select value={spreadLegs[0]?.ten} onChange={e=>upd(0,"ten",e.target.value)} style={{...iS}}>{ALL_TEN.map(t=><option key={t} value={t}>{t}</option>)}</select>
-                  <input value={spreadLegs[0]?.lock||""} onChange={e=>upd(0,"lock",e.target.value)} onKeyDown={e=>e.key==="Enter"&&solve()} placeholder="lock" style={{...iS,color:"#e0c040",fontWeight:700,textAlign:"center"}}/>
-                  <input value={spreadLegs[0]?.ratio||""} onChange={e=>upd(0,"ratio",e.target.value)} onKeyDown={e=>e.key==="Enter"&&solve()} placeholder="R" style={{...iS,color:"#a070d0",fontWeight:700,textAlign:"center"}}/>
-                  <input value={spreadLegs[0]?.price||""} onChange={e=>upd(0,"price",e.target.value)} onKeyDown={e=>e.key==="Enter"&&solve()} placeholder="bid" style={{...iS,color:"#00c040",fontWeight:700,textAlign:"center"}}/>
-                  <input value={spreadLegs[0]?.bank||""} onChange={e=>upd(0,"bank",e.target.value.toUpperCase())} placeholder="BK" style={{...iS,color:bkc(spreadLegs[0]?.bank||""),fontWeight:700,textAlign:"center"}}/>
+                  <select value={spreadLegs[0]?.exp} onChange={e=>upd(0,"exp",e.target.value)} style={{...iS,...gS}}>{ALL_EXP.map(e=><option key={e} value={e}>{e.toUpperCase()}</option>)}</select>
+                  <select value={spreadLegs[0]?.ten} onChange={e=>upd(0,"ten",e.target.value)} style={{...iS,...gS}}>{ALL_TEN.map(t=><option key={t} value={t}>{t}</option>)}</select>
+                  <input value={spreadLegs[0]?.lock||""} onChange={e=>upd(0,"lock",e.target.value)} onKeyDown={e=>e.key==="Enter"&&solve()} placeholder="LOCK" style={{...iS,...gS,color:"#e0c040",fontWeight:700,textAlign:"center",border:"1px solid #8a7020",background:"rgba(60,50,10,.35)"}}/>
+                  <input value={spreadLegs[0]?.ratio||""} onChange={e=>upd(0,"ratio",e.target.value)} onKeyDown={e=>e.key==="Enter"&&solve()} placeholder="R" style={{...iS,...gS,color:"#a070d0",fontWeight:700,textAlign:"center"}}/>
+                  <input value={spreadLegs[0]?.price||""} onChange={e=>upd(0,"price",e.target.value)} onKeyDown={e=>e.key==="Enter"&&solve()} placeholder="bid" style={{...iS,...gS,color:"#00c040",fontWeight:700,textAlign:"center"}}/>
+                  <input value={spreadLegs[0]?.bank||""} onChange={e=>upd(0,"bank",e.target.value.toUpperCase())} placeholder="BK" style={{...iS,...gS,color:bkc(spreadLegs[0]?.bank||""),fontWeight:700,textAlign:"center"}}/>
                 </div>
 
                 {/* Leg 1 — OFFER leg (unlocked, implied prints here). Price header = Offer */}
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 42px 26px 1fr 34px",gap:2,alignItems:"center",marginBottom:1}}>
-                  <select value={spreadLegs[1]?.exp} onChange={e=>upd(1,"exp",e.target.value)} style={{...iS}}>{ALL_EXP.map(e=><option key={e} value={e}>{e.toUpperCase()}</option>)}</select>
-                  <select value={spreadLegs[1]?.ten} onChange={e=>upd(1,"ten",e.target.value)} style={{...iS}}>{ALL_TEN.map(t=><option key={t} value={t}>{t}</option>)}</select>
+                  <select value={spreadLegs[1]?.exp} onChange={e=>upd(1,"exp",e.target.value)} style={{...iS,...gS}}>{ALL_EXP.map(e=><option key={e} value={e}>{e.toUpperCase()}</option>)}</select>
+                  <select value={spreadLegs[1]?.ten} onChange={e=>upd(1,"ten",e.target.value)} style={{...iS,...gS}}>{ALL_TEN.map(t=><option key={t} value={t}>{t}</option>)}</select>
                   <span style={{color:"#2a2a3a",fontSize:8,textAlign:"center"}}>—</span>
-                  <input value={spreadLegs[1]?.ratio||""} onChange={e=>upd(1,"ratio",e.target.value)} onKeyDown={e=>e.key==="Enter"&&solve()} placeholder="R" style={{...iS,color:"#a070d0",fontWeight:700,textAlign:"center"}}/>
-                  <input value={spreadLegs[1]?.price||""} onChange={e=>upd(1,"price",e.target.value)} onKeyDown={e=>e.key==="Enter"&&solve()} placeholder="offer" style={{...iS,color:"#ff8c00",fontWeight:700,textAlign:"center"}}/>
-                  <input value={spreadLegs[1]?.bank||""} onChange={e=>upd(1,"bank",e.target.value.toUpperCase())} placeholder="BK" style={{...iS,color:bkc(spreadLegs[1]?.bank||""),fontWeight:700,textAlign:"center"}}/>
+                  <input value={spreadLegs[1]?.ratio||""} onChange={e=>upd(1,"ratio",e.target.value)} onKeyDown={e=>e.key==="Enter"&&solve()} placeholder="R" style={{...iS,...gS,color:"#a070d0",fontWeight:700,textAlign:"center"}}/>
+                  <input value={spreadLegs[1]?.price||""} onChange={e=>upd(1,"price",e.target.value)} onKeyDown={e=>e.key==="Enter"&&solve()} placeholder="offer" style={{...iS,...gS,color:"#ff8c00",fontWeight:700,textAlign:"center"}}/>
+                  <input value={spreadLegs[1]?.bank||""} onChange={e=>upd(1,"bank",e.target.value.toUpperCase())} placeholder="BK" style={{...iS,...gS,color:bkc(spreadLegs[1]?.bank||""),fontWeight:700,textAlign:"center"}}/>
                 </div>
                 <div style={{display:"flex",justifyContent:"space-between",fontSize:7,color:"#5a3090",marginBottom:6,paddingLeft:2}}>
                   <span>row1 = BID leg (locked)</span><span>row2 = OFFER leg</span>
