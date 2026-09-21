@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 1709e
+// RateEdge vol-blotter 1709f
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -2879,6 +2879,9 @@ export default function App() {
   const sdrManualPollRef = React.useRef(null);
   const [sdrCfCount, setSdrCfCount] = useState({caps:0,floors:0,total:0});
   const [sdrFilterType,     setSdrFilterType]     = useState(()=>loadLS("vbl_sdr_type",[]));
+  // v1709f: glare modes for bright rooms — DARK (original), HI-CON (brighter/bolder), LIGHT (inverted)
+  const [glare, setGlare] = useState(()=>{ const v=loadLS("vbl_glare","DARK"); return ["DARK","HICON","LIGHT"].includes(v)?v:"DARK"; });
+  useEffect(()=>{ try{ localStorage.setItem("vbl_glare", JSON.stringify(glare)); }catch{} },[glare]);
   const [sdrFilterPlatform, setSdrFilterPlatform] = useState(()=>{ const v=loadLS("vbl_sdr_venue2",DEFAULT_VENUE_NAMES); return (Array.isArray(v)&&v.includes("Tradition")&&!v.includes("Tradeweb")) ? [...v,"Tradeweb"] : v; });  // 1709a: TWSF/TWEM split out of Tradition
   const [sdrFilterAction,   setSdrFilterAction]   = useState([]);
   const [spreadName,   setSpreadName]   = useState("");
@@ -3795,9 +3798,12 @@ export default function App() {
   const ts  = now.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
 
   return (
-    <div style={{height:"100vh",background:"#020408",color:"#b0bcc8",fontFamily:"'JetBrains Mono','Fira Code',monospace",display:"flex",flexDirection:"column",width:"100%",overflow:"hidden"}}>
+    <div className={`vbl-${glare.toLowerCase()}`} style={{height:"100vh",background:"#020408",color:"#b0bcc8",fontFamily:"'JetBrains Mono','Fira Code',monospace",display:"flex",flexDirection:"column",width:"100%",overflow:"hidden",
+      filter: glare==="HICON" ? "brightness(1.45) contrast(1.3)" : glare==="LIGHT" ? "invert(1) hue-rotate(180deg) contrast(1.15)" : "none"}}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap');
+        .vbl-light img, .vbl-light video, .vbl-light canvas { filter: invert(1) hue-rotate(180deg); }
+        .vbl-hicon td, .vbl-light td { font-weight: 600; }
         html,body,#root{width:100%;height:100%;overflow:hidden;margin:0;padding:0;}
         *{box-sizing:border-box;margin:0;padding:0;}
         ::-webkit-scrollbar{width:5px;height:5px} ::-webkit-scrollbar-track{background:#060810} ::-webkit-scrollbar-thumb{background:#243448;border-radius:3px}
@@ -3836,7 +3842,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v1709e</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v1709f</span>
       </div>
 
       {/* HEADER */}
@@ -3876,6 +3882,10 @@ export default function App() {
             {copiedEOD?"COPIED ✓":"EOD"}
           </button>
           <span style={{color:mktLive?"#40c070":"#a04040",fontSize:9,fontWeight:700}}>{mktLive?"LIVE":"EBD"}</span>
+          <button onClick={()=>setGlare(g=>g==="DARK"?"HICON":g==="HICON"?"LIGHT":"DARK")} title="Screen mode for glare: DARK → HI-CON → LIGHT"
+            style={{background:glare==="DARK"?"rgba(20,50,80,.5)":"rgba(120,100,20,.35)",border:`1px solid ${glare==="DARK"?"#2e4e78":"rgba(220,180,40,.6)"}`,color:glare==="DARK"?"#5a96c8":"#f0d060",padding:"3px 10px",borderRadius:3,cursor:"pointer",fontSize:9,fontFamily:"inherit",letterSpacing:".08em",fontWeight:700}}>
+            {glare==="DARK"?"\u2600 DARK":glare==="HICON"?"\u2600 HI-CON":"\u2600 LIGHT"}
+          </button>
           <span style={{color:"#4a7898",fontSize:9}}>INDICATIVE ONLY</span>
           <span style={{color:"#305870",fontSize:11}}>{mktLabel} {mktTime}</span>
         </div>
