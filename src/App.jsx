@@ -1,4 +1,4 @@
-// RateEdge vol-blotter 1709f
+// RateEdge vol-blotter 3009a
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 
 // ── Supabase config ──────────────────────────────────────────────────────────
@@ -2676,7 +2676,7 @@ function buildSdrFlash(sdrData, sdrFilterAction, sdrFilterType, sdrFilterPlatfor
           const tenKey = sdrTenToKey(t.swp);
           if (!expKey || !tenKey) return;
           const ts = t.tsMs;
-          if (!(ts >= tradingDayStartMs && ts <= tradingDayEndMs)) return; // only 7am-6pm trading day
+          if (!(ts >= tradingDayStartMs && ts <= tradingDayEndMs)) return; // only current SDR day (11:00 UTC reset)
           const k = `${expKey}|${tenKey}`;
           const entry = { notional: t.notional, rate: t.pStrike,
             rcvrStrike: (t.kind==="Strangle") ? t.rStrike : null,
@@ -2879,7 +2879,7 @@ export default function App() {
   const sdrManualPollRef = React.useRef(null);
   const [sdrCfCount, setSdrCfCount] = useState({caps:0,floors:0,total:0});
   const [sdrFilterType,     setSdrFilterType]     = useState(()=>loadLS("vbl_sdr_type",[]));
-  // v1709f: glare modes for bright rooms — DARK (original), HI-CON (brighter/bolder), LIGHT (inverted)
+  // v3009a: SDR day resets at 11:00 UTC (midday LDN / 7am NYC); v1709f: glare modes for bright rooms — DARK (original), HI-CON (brighter/bolder), LIGHT (inverted)
   const [glare, setGlare] = useState(()=>{ const v=loadLS("vbl_glare","DARK"); return ["DARK","HICON","LIGHT"].includes(v)?v:"DARK"; });
   useEffect(()=>{ try{ localStorage.setItem("vbl_glare", JSON.stringify(glare)); }catch{} },[glare]);
   const [sdrFilterPlatform, setSdrFilterPlatform] = useState(()=>{ const v=loadLS("vbl_sdr_venue2",DEFAULT_VENUE_NAMES); return (Array.isArray(v)&&v.includes("Tradition")&&!v.includes("Tradeweb")) ? [...v,"Tradeweb"] : v; });  // 1709a: TWSF/TWEM split out of Tradition
@@ -3213,26 +3213,15 @@ export default function App() {
 
   const CCY_TZ = {AUD:"Australia/Sydney",USD:"America/New_York",EUR:"Europe/London",JPY:"Asia/Tokyo"};
   const mktTz = CCY_TZ[activeCcy]||"Australia/Sydney";
+  // SDR trading day resets at 11:00 UTC (midday London / 7am NYC)
   const tradingDayStartMs = useMemo(() => {
     const n = new Date();
-    const fmt = new Intl.DateTimeFormat("en-US",{timeZone:mktTz,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",hour12:false});
-    const parts = Object.fromEntries(fmt.formatToParts(n).map(p=>[p.type,p.value]));
-    const hr = parseInt(parts.hour);
-    // Work from current UTC time: go back (hr - 7) hours to reach 7am in target tz
-    const now = n.getTime();
-    const minsIntoHour = n.getMinutes();
-    let target7am;
-    if (hr >= 7) {
-      target7am = now - ((hr - 7) * 3600000 + minsIntoHour * 60000 + n.getSeconds() * 1000);
-    } else {
-      target7am = now - ((24 + hr - 7) * 3600000 + minsIntoHour * 60000 + n.getSeconds() * 1000);
-    }
-    // Fine-tune: verify hour in target tz and adjust
-    const checkHr = parseInt(new Intl.DateTimeFormat("en-US",{timeZone:mktTz,hour:"2-digit",hour12:false}).format(new Date(target7am)));
-    target7am += (7 - checkHr) * 3600000;
-    return target7am;
+    // Today at 11:00 UTC
+    const today11 = Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate(), 11, 0, 0, 0);
+    // If we haven't reached 11:00 UTC yet, the current trading day started yesterday at 11:00 UTC
+    return n.getTime() >= today11 ? today11 : today11 - 86400000;
   }, [activeCcy]);
-  const tradingDayEndMs = tradingDayStartMs + 11*3600000; // 7am + 11hr = 6pm
+  const tradingDayEndMs = tradingDayStartMs + 86400000; // full 24h until next reset
 
   // Rebuild SDR flash when filters change
   useEffect(() => {
@@ -3842,7 +3831,7 @@ export default function App() {
       {/* TOP TITLE BAR */}
       <div style={{background:"#060c18",borderBottom:"1px solid #1a2e44",padding:"6px 18px",textAlign:"center",flexShrink:0}}>
         <span style={{color:"#3a6080",fontSize:9,fontWeight:700,letterSpacing:".25em"}}>INTEREST RATE OPTION LIVE MARKETS BLOTTER</span>
-        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v1709f</span>
+        <span style={{color:"#2a4a6a",fontSize:7,fontWeight:700,marginLeft:8}}>v3009a</span>
       </div>
 
       {/* HEADER */}
